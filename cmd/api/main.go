@@ -27,6 +27,9 @@ import (
 	_ "github.com/henry/javapi/internal/scraper/javgg"
 	_ "github.com/henry/javapi/internal/scraper/missav"
 	_ "github.com/henry/javapi/internal/scraper/sevenmmtv"
+
+	// Register embed extractors via init()
+	_ "github.com/henry/javapi/internal/embed"
 )
 
 func main() {

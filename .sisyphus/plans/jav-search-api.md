@@ -1441,23 +1441,55 @@ func extractM3U8FromRawHTML(html string) []string {
 - 找到所有 `.m3u8` URL（包括藏在 script/data-* 中的）
 - 附加到现有 DOM 提取结果之后
 
-### 修复 2: Jable 用 CF 客户端 (小) ✅ 已部署
+## 嵌入页 M3U8 解析 — 技术验证
 
-### 结果
+### 背景
+javgg 返回 `https://jav-vids.xyz/embed/me3diq35ekqx` 但这不是直接可播放的 M3U8。
+需要进一步获取嵌入页，从中提取真正的 M3U8 URL。
 
-| 站点 | 状态 | 说明 |
-|------|------|------|
-| AV01 | ✅ | M3U8 正常提取 |
-| javgg | ✅ | 3 个 embed URL |
-| Jable | ⚠️ | `#flag-form` — M3U8 在 JS 中动态加载 |
-| MISSAV | ⚠️ | srcs=0 — 页面结构变化，DOM 中无视频元素 |
-| 7mmtv | 🚫 | 需住宅代理 |
+参考项目 `missav/embed.go` 有完整的嵌入解析系统（5 个提取器 + 通用后备）。
 
-### 后续
+### 验证范围
+**仅 `jav-vids.xyz`** — 作为技术验证。成功后扩展到其他嵌入站点。
 
-Jable 的 M3U8 URL (`mushroomtrack.com`) 不在初始 HTML 中——由 JavaScript 动态加载，需要 headless browser 或 JS 执行引擎。
+### 技术方案
 
-### 修复 2: Jable 用 CF 客户端 (小)
+```
+javgg scraper 返回:
+  https://jav-vids.xyz/embed/me3diq35ekqx
+
+↓ 新增: EmbedResolver 服务
+
+1. 匹配 embed host (jav-vids.xyz)
+2. HTTP GET 嵌入页 (使用 CycleTLS)
+3. 正则/JS解包 提取 M3U8 URL
+4. 替换 VideoSource URL
+
+javgg 现在返回:
+  https://cdn.xxx.com/stream.m3u8  ← 真实 M3U8
+```
+
+### 实现步骤
+
+1. 创建 `internal/embed/` 包
+   - `resolver.go` — EmbedResolver 接口 + 注册表
+   - `javvids.go` — jav-vids.xyz 提取器
+   - `generic.go` — 通用正则后备
+
+2. 注册提取器 (init 模式)
+   ```go
+   type EmbedExtractor interface {
+       MatchHost(host string) bool
+       Extract(ctx, pageURL string) ([]string, error)
+   }
+   ```
+
+3. 在 aggregator 中集成
+   - 收集所有 VideoSources
+   - 对匹配 embed host 的 URL 调用解析
+   - 替换为解析后的 M3U8 URL
+
+4. 测试: `MIDA-492` → javgg 返回真实 M3U8 而非嵌入页 URL
 
 Jable 使用纯 `net/http`（无 CF 绕过）。
 替换为 `scraper.NewCFClient(proxyURL)`（与 MISSAV 相同）:

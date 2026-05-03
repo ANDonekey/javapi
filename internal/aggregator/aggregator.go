@@ -11,6 +11,7 @@ import (
 	"golang.org/x/sync/semaphore"
 
 	"github.com/henry/javapi/internal/domain"
+	"github.com/henry/javapi/internal/embed"
 	"github.com/henry/javapi/internal/scraper"
 )
 
@@ -96,6 +97,15 @@ func (s *Service) Aggregate(ctx context.Context, code string) (*domain.SearchRes
 	}
 
 	wg.Wait()
+
+	for i := range videos {
+		for j := range videos[i].VideoSources {
+			resolved := embed.ResolveEmbed(ctx, videos[i].VideoSources[j])
+			if resolved.URL != videos[i].VideoSources[j].URL {
+				videos[i].VideoSources[j] = resolved
+			}
+		}
+	}
 
 	if movie == nil && len(videos) == 0 {
 		return nil, fmt.Errorf("all sources failed for code %q", code)
