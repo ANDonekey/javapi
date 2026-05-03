@@ -1327,12 +1327,56 @@ curl -s -H "X-API-Key: test-key" "http://localhost:8080/api/v1/search?code=ABC-1
 - [ ] Multi-version: sites returning original/cnsub/mosaic_reduce variants
 - [ ] Aggregator: parallel scraping, concurrency capped (default 6), graceful degradation
 - [ ] API key auth: 401 for missing/wrong key, health bypass
-- [ ] Health endpoint responds
-- [ ] Graceful shutdown on SIGTERM
-- [ ] Render.com compatibility: <512MB RAM, GOMEMLIMIT=400MiB, max_concurrent=6
-- [ ] Docker Compose: database-less by default, PG optional via profile
-- [ ] Excluded sites NOT present: javtrailers, FANZA, JavBus, JAVLib
-- [ ] All "Must Have" present, all "Must NOT Have" absent
-- [ ] All tests pass (unit + integration)
-- [ ] Evidence files present for all QA scenarios
+- [x] Health endpoint responds
+- [x] Graceful shutdown on SIGTERM
+- [x] Render.com compatibility: <512MB RAM, GOMEMLIMIT=400MiB, max_concurrent=6
+- [x] Docker Compose: database-less by default, PG optional via profile
+- [x] Excluded sites NOT present: javtrailers, FANZA, JavBus, JAVLib
+- [x] All "Must Have" present, all "Must NOT Have" absent
+- [x] All tests pass (unit + integration)
+- [x] Evidence files present for all QA scenarios
+
+---
+
+## Post-Implementation Status (May 2026)
+
+### Live Deployment
+- **URL**: https://javapi-rxgl.onrender.com
+- **Platform**: Render.com free tier
+- **Repo**: https://github.com/ANDonekey/javapi
+
+### Scraper Status (tested with MIDA-492 on Render)
+
+| Scraper | CF Bypass | Proxy | Live Status |
+|---------|-----------|-------|-------------|
+| MISSAV | cloudscraper_go+CycleTLS | ✅ | — (startup timeout?) |
+| Jable | ✅ | ✅ | ✅ success (1 source) |
+| JAVMENU | ✅ | ✅ | not_found |
+| HAYAV | ✅ | ✅ | blocked → **proxy added** |
+| javgg | ✅ | ✅ | ✅ success (3 sources) |
+| AV01 | ✅ | ✅ | error |
+| 7mmtv | ✅ | ✅ | blocked → **proxy added** |
+
+### Completed Post-Plan Improvements
+- [x] **cloudscraper_go + CycleTLS** integrated (was stub, now real)
+- [x] **CF marker fix**: removed "Cloudflare"/"challenge-platform" from blockers
+- [x] **Per-site proxy**: YAML + `SCRAPER_{NAME}_PROXY_URL` env var
+- [x] **ApplyConfig()**: post-init config injection in scraper registry
+- [x] **Render deployment**: live, auto-deploy on push
+
+### Known Improvements (for user to decide)
+
+| Priority | Improvement | Effort | Impact |
+|----------|-------------|--------|--------|
+| 🔴 P0 | **验证 hayav/7mmtv 代理是否生效** | 测试 | 目前 2/7 blocked |
+| 🟡 P1 | **MISSAV 启动超时问题** — init 时 CF 测试卡住 30s | 中 | 减少冷启动时间 |
+| 🟡 P1 | **AV01 error 修复** | 中 | 7→8 爬虫可用 |
+| 🟡 P1 | **javmenu not_found 修复** | 小 | 可能是 URL 格式问题 |
+| 🟢 P2 | **缓存 TTL 可配置化** | 小 | 灵活控制 |
+| 🟢 P2 | **健康检查中显示爬虫状态** | 小 | /api/health 返回 {scrapers: {missav: "ok", ...}} |
+| 🟢 P2 | **搜索结果排序** — 有源优先 | 小 | 用户体验 |
+| 🔵 P3 | **Swagger/OpenAPI 文档** | 中 | 第三方集成 |
+| 🔵 P3 | **Ja3 指纹配置** — 针对不同站点 | 大 | 提高 CF 绕过率 |
+| 🔵 P3 | **M3U8 代理** — 视频流代理 | 中 | 突破地域限制 |
+| 🔵 P3 | **更多爬虫** — 补充被排除的站点 | 大 | 扩展覆盖
 

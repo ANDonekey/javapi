@@ -64,6 +64,8 @@ type Scraper struct {
 	baseURL     string
 	enabled     bool
 	proxyConfig domain.ProxyConfig
+	cfTested    bool
+	cfPassed    bool
 }
 
 // Compile-time interface check.
@@ -74,20 +76,17 @@ func init() {
 }
 
 // New creates a 7mmtv scraper with the given proxy configuration.
-// On construction it runs a Cloudflare bypass pre-test against the base URL.
-// If the test fails, the scraper is created with IsEnabled() returning false
-// and a warning is logged.
+// The Cloudflare bypass test is deferred to the first Search() call so that
+// proxy configuration (set via ApplyConfig after construction) is respected.
 func New(config domain.ProxyConfig) *Scraper {
 	transport := &http.Transport{}
-	proxyURL := ""
 	if config.Enabled && config.URL != "" {
-		proxyURL = config.URL
 		if pu, err := url.Parse(config.URL); err == nil {
 			transport.Proxy = http.ProxyURL(pu)
 		}
 	}
 
-	s := &Scraper{
+	return &Scraper{
 		client: &http.Client{
 			Timeout:   15 * time.Second,
 			Transport: transport,
@@ -96,21 +95,6 @@ func New(config domain.ProxyConfig) *Scraper {
 		enabled:     true,
 		proxyConfig: config,
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-	defer cancel()
-
-	result, err := scraper.CFBypassTest(ctx, baseURL+"/", proxyURL)
-	if err != nil || !result.Passed {
-		s.enabled = false
-		errMsg := "unknown error"
-		if result != nil {
-			errMsg = result.Error
-		}
-		log.Printf("7mmtv: Cloudflare bypass test failed, scraper disabled: %s", errMsg)
-	}
-
-	return s
 }
 
 // newTestScraper creates a scraper with a custom HTTP client and base URL.
@@ -121,6 +105,8 @@ func newTestScraper(client *http.Client, baseURLOverride string) *Scraper {
 		baseURL:     baseURLOverride,
 		enabled:     true,
 		proxyConfig: domain.ProxyConfig{Enabled: false},
+		cfTested:    true,
+		cfPassed:    true,
 	}
 }
 
@@ -157,6 +143,32 @@ func (s *Scraper) SetProxyConfig(pc domain.ProxyConfig) {
 // Returns one VideoResult if found, StatusNotFound if no match, or an error.
 func (s *Scraper) Search(ctx context.Context, code string) ([]domain.VideoResult, error) {
 	if !s.enabled {
+		return nil, fmt.Errorf("7mmtv: scraper is disabled")
+	}
+
+	if !s.cfTested {
+		s.cfTested = true
+		proxyURL := ""
+		if s.proxyConfig.Enabled {
+			proxyURL = s.proxyConfig.URL
+		}
+		result, err := scraper.CFBypassTest(ctx, baseURL+"/", proxyURL)
+		if err != nil || !result.Passed {
+			s.cfPassed = false
+			errMsg := "CF bypass failed"
+			if result != nil {
+				errMsg = result.Error
+			}
+			log.Printf("7mmtv: Cloudflare bypass test failed, scraper disabled: %s", errMsg)
+			return []domain.VideoResult{{
+				SiteName: siteName,
+				Status:   domain.StatusBlocked,
+				Error:    "CF bypass failed: " + errMsg,
+			}}, nil
+		}
+		s.cfPassed = true
+	}
+	if !s.cfPassed {
 		return nil, fmt.Errorf("7mmtv: scraper is disabled")
 	}
 

@@ -114,6 +114,8 @@ func newTestScraper(srvURL string) *Scraper {
 		proxyConfig: domain.ProxyConfig{},
 		httpClient:  srvURLClient(srvURL),
 		baseURL:     srvURL,
+		cfTested:    true,
+		cfPassed:    true,
 	}
 }
 

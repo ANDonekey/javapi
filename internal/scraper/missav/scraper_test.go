@@ -117,6 +117,8 @@ func newTestScraper(srvURL string) *MISSAVScraper {
 		proxyConfig: domain.ProxyConfig{},
 		httpClient:  &http.Client{Timeout: 5 * time.Second},
 		baseURL:     srvURL,
+		cfTested:    true,
+		cfPassed:    true,
 	}
 }
 

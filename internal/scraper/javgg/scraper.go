@@ -16,7 +16,6 @@ import (
 	"log"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/henry/javapi/internal/domain"
@@ -38,38 +37,25 @@ type Scraper struct {
 	proxyConfig domain.ProxyConfig
 	httpClient  *http.Client
 	baseURL     string
+	cfTested    bool
+	cfPassed    bool
 }
 
 // New creates a javgg scraper with the given proxy configuration.
-// It runs a Cloudflare bypass pre-test; if the test fails, the scraper is
-// created with IsEnabled() returning false and a warning is logged.
+// The Cloudflare bypass test is deferred to the first Search() call so that
+// proxy configuration (set via ApplyConfig after construction) is respected.
 func New(config domain.ProxyConfig) *Scraper {
 	proxyURL := ""
 	if config.Enabled {
 		proxyURL = config.URL
 	}
 
-	s := &Scraper{
+	return &Scraper{
 		enabled:     true,
 		proxyConfig: config,
 		httpClient:  scraper.NewCFClient(proxyURL),
 		baseURL:     baseURL,
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-	defer cancel()
-
-	result, err := scraper.CFBypassTest(ctx, cfTestURL, proxyURL)
-	if err != nil || !result.Passed {
-		s.enabled = false
-		errMsg := "unknown error"
-		if result != nil {
-			errMsg = result.Error
-		}
-		log.Printf("javgg: Cloudflare bypass test failed, scraper disabled: %s", errMsg)
-	}
-
-	return s
 }
 
 func (s *Scraper) Name() string                         { return siteName }
@@ -91,6 +77,32 @@ func (s *Scraper) SetProxyConfig(pc domain.ProxyConfig) {
 // Search scrapes javgg.net for the given code and returns video results.
 func (s *Scraper) Search(ctx context.Context, code string) ([]domain.VideoResult, error) {
 	if !s.enabled {
+		return nil, fmt.Errorf("javgg: scraper is disabled")
+	}
+
+	if !s.cfTested {
+		s.cfTested = true
+		proxyURL := ""
+		if s.proxyConfig.Enabled {
+			proxyURL = s.proxyConfig.URL
+		}
+		result, err := scraper.CFBypassTest(ctx, cfTestURL, proxyURL)
+		if err != nil || !result.Passed {
+			s.cfPassed = false
+			errMsg := "CF bypass failed"
+			if result != nil {
+				errMsg = result.Error
+			}
+			log.Printf("javgg: Cloudflare bypass test failed, scraper disabled: %s", errMsg)
+			return []domain.VideoResult{{
+				SiteName: siteName,
+				Status:   domain.StatusBlocked,
+				Error:    "CF bypass failed: " + errMsg,
+			}}, nil
+		}
+		s.cfPassed = true
+	}
+	if !s.cfPassed {
 		return nil, fmt.Errorf("javgg: scraper is disabled")
 	}
 
