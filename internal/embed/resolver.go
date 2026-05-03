@@ -37,16 +37,6 @@ func ResolveEmbed(ctx context.Context, src domain.VideoSource) domain.VideoSourc
 		client := &http.Client{Timeout: 15 * time.Second}
 		urls, err := e.Extract(ctx, client, src.URL)
 		if err == nil && len(urls) > 0 {
-			variants, err := resolveM3U8Playlist(ctx, client, urls[0])
-			if err == nil && len(variants) > 1 {
-				best := variants[0]
-				for _, v := range variants[1:] {
-					if v.Bandwidth > best.Bandwidth {
-						best = v
-					}
-				}
-				return domain.VideoSource{URL: best.URL, Type: "application/x-mpegURL", Quality: best.Quality}
-			}
 			return domain.VideoSource{URL: urls[0], Type: "application/x-mpegURL"}
 		}
 	}
