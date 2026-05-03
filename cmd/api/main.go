@@ -68,6 +68,10 @@ func main() {
 
 	r.Get("/api/health", handler.Health)
 
+	// Serve test frontend (no auth required for HTML/JS/CSS)
+	fileServer := http.FileServer(http.Dir("./test"))
+	r.Handle("/test/*", http.StripPrefix("/test/", fileServer))
+
 	r.Group(func(r chi.Router) {
 		r.Use(myMiddleware.Auth(cfg.Auth.APIKeys, "/api/health"))
 		r.Get("/api/v1/search", searchH.Search)

@@ -876,15 +876,6 @@
                         placeholder="Leave empty for same-origin or enter Render URL"
                     >
                 </div>
-                <div class="input-group">
-                    <label for="apiKey">API Key</label>
-                    <input 
-                        type="password" 
-                        id="apiKey" 
-                        class="input-field" 
-                        placeholder="Enter your API key"
-                    >
-                </div>
             </div>
         </div>
 
@@ -944,6 +935,14 @@
                     </div>
                 </div>
 
+                <div class="m3u8-section" id="m3u8Section" style="display: none; margin-top: var(--space-md);">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-sm);">
+                        <h3 style="font-size: 0.9rem; color: var(--text-secondary); margin: 0;">M3U8 Playlist Content</h3>
+                        <button class="btn btn-secondary btn-sm" onclick="copyM3u8Content()">📋 Copy</button>
+                    </div>
+                    <textarea id="m3u8-content" readonly class="input-field" style="width: 100%; height: 200px; font-family: var(--font-mono); font-size: 0.8rem; resize: vertical;"></textarea>
+                </div>
+
                 <div class="sources-list" id="sourcesList"></div>
             </div>
         </div>
@@ -958,7 +957,7 @@
         const searchInput = document.getElementById('searchInput');
         const searchBtn = document.getElementById('searchBtn');
         const apiBaseUrlInput = document.getElementById('apiBaseUrl');
-        const apiKeyInput = document.getElementById('apiKey');
+
         const loadingOverlay = document.getElementById('loadingOverlay');
         const resultsSection = document.getElementById('resultsSection');
         const errorContainer = document.getElementById('errorContainer');
@@ -975,7 +974,6 @@
 
             // Auto-save settings
             apiBaseUrlInput.addEventListener('change', saveSettings);
-            apiKeyInput.addEventListener('change', saveSettings);
         });
 
         // Settings Management
@@ -984,14 +982,12 @@
             if (settings) {
                 const parsed = JSON.parse(settings);
                 apiBaseUrlInput.value = parsed.baseUrl || '';
-                apiKeyInput.value = parsed.apiKey || '';
             }
         }
 
         function saveSettings() {
             const settings = {
-                baseUrl: apiBaseUrlInput.value.trim(),
-                apiKey: apiKeyInput.value.trim()
+                baseUrl: apiBaseUrlInput.value.trim()
             };
             localStorage.setItem('javApiSettings', JSON.stringify(settings));
             showToast('Settings saved', 'success');
@@ -1000,10 +996,6 @@
         // API Helpers
         function getApiBaseUrl() {
             return apiBaseUrlInput.value.trim() || '';
-        }
-
-        function getApiKey() {
-            return apiKeyInput.value.trim();
         }
 
         function buildUrl(endpoint) {
@@ -1023,11 +1015,6 @@
                 return;
             }
 
-            if (!getApiKey()) {
-                showError('Please enter your API key in settings');
-                return;
-            }
-
             clearError();
             showLoading(true);
 
@@ -1035,7 +1022,6 @@
                 const response = await fetch(buildUrl(`/api/v1/search?code=${encodeURIComponent(code)}`), {
                     method: 'GET',
                     headers: {
-                        'X-API-Key': getApiKey(),
                         'Accept': 'application/json'
                     }
                 });
@@ -1205,6 +1191,9 @@
                             <button class="btn btn-primary btn-sm" onclick="playVideo(${index}, 0)">
                                 <span>▶️</span> Play
                             </button>
+                            <button class="btn btn-secondary btn-sm" onclick="fetchAndShowM3U8(${index})">
+                                <span>📄</span> Fetch M3U8
+                            </button>
                             <button class="btn btn-secondary btn-sm" onclick="copyM3U8Url(${index}, 0)">
                                 <span>📋</span> Copy URL
                             </button>
@@ -1299,6 +1288,53 @@
                 showToast('URL copied to clipboard', 'success');
             }).catch(() => {
                 showToast('Failed to copy URL', 'error');
+            });
+        }
+
+        // M3U8 proxy fetch
+        async function fetchM3U8(m3u8Url) {
+            const encoded = btoa(m3u8Url);
+            const proxyUrl = buildUrl(`/api/v1/m3u8?url=${encoded}`);
+            const resp = await fetch(proxyUrl);
+            if (!resp.ok) {
+                throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+            }
+            return await resp.text();
+        }
+
+        async function fetchAndShowM3U8(videoIndex) {
+            if (!searchResults || !searchResults.videos[videoIndex]) return;
+
+            const video = searchResults.videos[videoIndex];
+            const sources = video.videoSources || [];
+
+            if (sources.length === 0) {
+                showToast('No video sources available', 'error');
+                return;
+            }
+
+            // Find first M3U8 source, fall back to first source
+            const m3u8Source = sources.find(s => s.type === 'application/x-mpegURL' || s.url.includes('.m3u8')) || sources[0];
+
+            try {
+                showLoading(true);
+                const content = await fetchM3U8(m3u8Source.url);
+                document.getElementById('m3u8-content').textContent = content;
+                document.getElementById('m3u8Section').style.display = 'block';
+                showToast('M3U8 loaded successfully', 'success');
+            } catch (error) {
+                showToast(`Failed to fetch M3U8: ${error.message}`, 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function copyM3u8Content() {
+            const textarea = document.getElementById('m3u8-content');
+            navigator.clipboard.writeText(textarea.value).then(() => {
+                showToast('M3U8 content copied', 'success');
+            }).catch(() => {
+                showToast('Failed to copy', 'error');
             });
         }
 

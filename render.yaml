@@ -26,3 +26,4 @@ services:
         sync: false
       - key: AUTH_DISABLED
         sync: false
+  # Test frontend served at /test/ — no auth required for HTML/JS/CSS
