@@ -24,3 +24,5 @@ services:
         sync: false
       - key: CACHE_DISABLED
         sync: false
+      - key: AUTH_DISABLED
+        sync: false
