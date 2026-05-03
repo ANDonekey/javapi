@@ -1441,7 +1441,34 @@ func extractM3U8FromRawHTML(html string) []string {
 - 找到所有 `.m3u8` URL（包括藏在 script/data-* 中的）
 - 附加到现有 DOM 提取结果之后
 
-## 嵌入页 M3U8 解析 — 技术验证
+## M3U8 代理端点 — 为前端提供可播放的 M3U8
+
+### 需求
+嵌入页解析返回的 M3U8 URL 存在 CORS 跨域问题。前端无法直接 fetch。
+需要 API 提供代理端点，获取 M3U8 内容并返回给前端。
+
+### 方案
+
+```
+前端                     JAV API                 CDN
+  │                        │                      │
+  │ GET /api/v1/m3u8?url=<encoded>                │
+  │──────────────────────→│                      │
+  │                        │ GET <m3u8_url>       │
+  │                        │─────────────────────→│
+  │                        │      M3U8 content    │
+  │                        │←─────────────────────│
+  │    M3U8 content        │                      │
+  │    (CORS headers)      │                      │
+  │←──────────────────────│                      │
+```
+
+实现：
+1. 新端点 `GET /api/v1/m3u8?url=<base64_encoded_m3u8_url>`
+2. 获取目标 M3U8 文件
+3. 返回内容 + CORS headers
+4. 验证 URL 为已知 M3U8 域名（安全）
+5. 缓存 M3U8 内容（短 TTL，如 60s）
 
 ### 背景
 javgg 返回 `https://jav-vids.xyz/embed/me3diq35ekqx` 但这不是直接可播放的 M3U8。
