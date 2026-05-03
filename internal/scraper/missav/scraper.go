@@ -187,12 +187,7 @@ func (s *MISSAVScraper) Search(ctx context.Context, code string) ([]domain.Video
 		}}, nil
 	}
 
-	hasSub := doc.Find(".space-y-2 a.text-nord13[href*='chinese-subtitle']").Length() > 0
-	hasLeak := doc.Find(".order-first div.rounded-md a[href]").Last().Length() > 0
-
-	var results []domain.VideoResult
-
-	original := domain.VideoResult{
+	return []domain.VideoResult{{
 		SiteName:     siteName,
 		Status:       domain.StatusSuccess,
 		Version:      domain.VersionOriginal,
@@ -200,34 +195,7 @@ func (s *MISSAVScraper) Search(ctx context.Context, code string) ([]domain.Video
 		VideoSources: sources,
 		Subtitle:     false,
 		Leak:         false,
-	}
-	results = append(results, original)
-
-	if hasSub && len(sources) > 0 && !hasLeak {
-		results = append(results, domain.VideoResult{
-			SiteName:     siteName,
-			Status:       domain.StatusSuccess,
-			Version:      domain.VersionCNSub,
-			PageURL:      pageURL,
-			VideoSources: sources,
-			Subtitle:     true,
-			Leak:         false,
-		})
-	}
-
-	if hasLeak && len(sources) > 0 {
-		results = append(results, domain.VideoResult{
-			SiteName:     siteName,
-			Status:       domain.StatusSuccess,
-			Version:      domain.VersionMosaicReduce,
-			PageURL:      pageURL,
-			VideoSources: sources,
-			Subtitle:     false,
-			Leak:         true,
-		})
-	}
-
-	return results, nil
+	}}, nil
 }
 
 func extractVideoSources(doc *goquery.Document) []domain.VideoSource {

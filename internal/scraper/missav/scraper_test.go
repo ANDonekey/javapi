@@ -235,15 +235,13 @@ func TestSearchWithSubtitle(t *testing.T) {
 	s := newTestScraper(srv.URL)
 	results, err := s.Search(context.Background(), "ABC-123")
 	require.NoError(t, err)
-	require.Len(t, results, 2)
+	require.Len(t, results, 1)
 
-	assert.Equal(t, domain.VersionOriginal, results[0].Version)
-	assert.False(t, results[0].Subtitle)
-
-	assert.Equal(t, domain.VersionCNSub, results[1].Version)
-	assert.True(t, results[1].Subtitle)
-	assert.False(t, results[1].Leak)
-	assert.Len(t, results[1].VideoSources, 1)
+	r := results[0]
+	assert.Equal(t, domain.VersionOriginal, r.Version)
+	assert.False(t, r.Subtitle)
+	assert.False(t, r.Leak)
+	assert.Len(t, r.VideoSources, 1)
 }
 
 func TestSearchWithLeak(t *testing.T) {
@@ -257,15 +255,13 @@ func TestSearchWithLeak(t *testing.T) {
 	s := newTestScraper(srv.URL)
 	results, err := s.Search(context.Background(), "ABC-123")
 	require.NoError(t, err)
-	require.Len(t, results, 2)
+	require.Len(t, results, 1)
 
-	assert.Equal(t, domain.VersionOriginal, results[0].Version)
-	assert.False(t, results[0].Leak)
-
-	assert.Equal(t, domain.VersionMosaicReduce, results[1].Version)
-	assert.True(t, results[1].Leak)
-	assert.False(t, results[1].Subtitle)
-	assert.Len(t, results[1].VideoSources, 1)
+	r := results[0]
+	assert.Equal(t, domain.VersionOriginal, r.Version)
+	assert.False(t, r.Subtitle)
+	assert.False(t, r.Leak)
+	assert.Len(t, r.VideoSources, 1)
 }
 
 func TestSearchWithBothVersions(t *testing.T) {
@@ -279,11 +275,12 @@ func TestSearchWithBothVersions(t *testing.T) {
 	s := newTestScraper(srv.URL)
 	results, err := s.Search(context.Background(), "ABC-123")
 	require.NoError(t, err)
-	require.Len(t, results, 2)
+	require.Len(t, results, 1)
 
-	assert.Equal(t, domain.VersionOriginal, results[0].Version)
-	assert.Equal(t, domain.VersionMosaicReduce, results[1].Version)
-	assert.True(t, results[1].Leak)
+	r := results[0]
+	assert.Equal(t, domain.VersionOriginal, r.Version)
+	assert.False(t, r.Subtitle)
+	assert.False(t, r.Leak)
 }
 
 func TestSearch404(t *testing.T) {
