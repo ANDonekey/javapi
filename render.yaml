@@ -22,3 +22,5 @@ services:
         sync: false
       - key: SCRAPER_AV01_PROXY_URL
         sync: false
+      - key: CACHE_DISABLED
+        sync: false

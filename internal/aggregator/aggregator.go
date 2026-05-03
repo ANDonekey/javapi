@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"sync"
 	"time"
 
@@ -35,10 +36,12 @@ func (s *Service) Aggregate(ctx context.Context, code string) (*domain.SearchRes
 	start := time.Now()
 	cacheKey := scraper.NormalizeCode(code)
 
-	if resp, ok := s.cache.Get(ctx, cacheKey); ok {
-		resp.Cache.Hit = true
-		resp.TookMs = time.Since(start).Milliseconds()
-		return resp, nil
+	if os.Getenv("CACHE_DISABLED") == "" {
+		if resp, ok := s.cache.Get(ctx, cacheKey); ok {
+			resp.Cache.Hit = true
+			resp.TookMs = time.Since(start).Milliseconds()
+			return resp, nil
+		}
 	}
 
 	sem := semaphore.NewWeighted(s.maxConcurrent)
@@ -103,6 +106,8 @@ func (s *Service) Aggregate(ctx context.Context, code string) (*domain.SearchRes
 		Cache:  domain.CacheInfo{Hit: false},
 		TookMs: time.Since(start).Milliseconds(),
 	}
-	_ = s.cache.Set(ctx, cacheKey, resp, 5*time.Minute)
+	if os.Getenv("CACHE_DISABLED") == "" {
+		_ = s.cache.Set(ctx, cacheKey, resp, 5*time.Minute)
+	}
 	return resp, nil
 }
