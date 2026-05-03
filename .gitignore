@@ -1,0 +1,32 @@
+# Binary
+/javapi
+/api
+*.exe
+
+# Environment
+.env
+
+# Data
+/data/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Session data (not needed for deployment)
+.sisyphus/evidence/
+.sisyphus/notepads/
+.sisyphus/boulder.json
+.sisyphus/drafts/
+
+# Test binaries
+*.test
+
+# Coverage
+coverage.out

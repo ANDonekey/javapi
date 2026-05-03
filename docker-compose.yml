@@ -1,0 +1,22 @@
+services:
+  api:
+    build: .
+    ports: ["8080:8080"]
+    volumes:
+      - ./configs:/configs:ro
+    environment:
+      - CACHE_POSTGRES_ENABLED=false
+      - SCRAPERS_MAX_CONCURRENT=6
+      - GOMEMLIMIT=400MiB
+      - AUTH_API_KEYS=dev-key
+  db:
+    image: postgres:16-alpine
+    profiles: ["pg"]
+    environment:
+      POSTGRES_USER: javapi
+      POSTGRES_PASSWORD: javapi
+      POSTGRES_DB: javapi
+    ports: ["5432:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+volumes:
+  pgdata:

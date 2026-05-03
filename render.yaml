@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: javapi
+    env: go
+    buildCommand: go mod download && go build -ldflags="-s -w" -o javapi ./cmd/api
+    startCommand: ./javapi
+    healthCheckPath: /api/health
+    envVars:
+      - key: GOMEMLIMIT
+        value: 400MiB
+      - key: SCRAPERS_MAX_CONCURRENT
+        value: "6"
+      - key: AUTH_API_KEYS
+        sync: false

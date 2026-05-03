@@ -1,0 +1,70 @@
+# JAV Search API — Configuration
+# Environment variable overrides are noted per section.
+
+# ── Server ──────────────────────────────────────────────────────────────────
+server:
+  host: "0.0.0.0"
+  port: 8080
+  read_timeout_sec: 10
+  write_timeout_sec: 30
+  shutdown_timeout_sec: 25
+
+# ── JavDB Signature ─────────────────────────────────────────────────────────
+# middle and suffix can be overridden via env vars JAVDB_MIDDLE / JAVDB_SUFFIX.
+javdb:
+  base_url: "https://jdforrepam.com"
+  middle: "lpw6vgqzsp"
+  suffix: "71cf27bb3c0bcdf207b64abecddc970098c7421ee7203b9cdae54478478a199e7d5a6e1a57691123c1a931c057842fb73ba3b3c83bcd69c17ccf174081e3d8aa"
+
+# ── Cache ────────────────────────────────────────────────────────────────────
+# Postgres is DISABLED by default (database-less mode).
+# Enable by setting postgres_enabled: true AND providing a postgres_url or
+# the CACHE_POSTGRES_URL env var.
+cache:
+  memory_ttl_seconds: 300
+  postgres_enabled: false
+  # postgres_url: "postgres://user:pass@localhost:5432/javapi?sslmode=disable"
+
+# ── Scrapers ─────────────────────────────────────────────────────────────────
+scrapers:
+  timeout_sec: 8
+  rate_limit_delay_ms: 500
+  user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+  max_concurrent: 6              # Render free-tier safe
+  sites:
+    - name: "javdb"
+      enabled: true
+      # proxy_url: "http://user:pass@brd.superproxy.io:22225"
+      proxy_enabled: false
+      timeout_sec: 10
+    - name: "javlibrary"
+      enabled: true
+      # proxy_url: "http://user:pass@brd.superproxy.io:22225"
+      proxy_enabled: false
+      timeout_sec: 10
+    - name: "arzon"
+      enabled: true
+      # proxy_url: "http://user:pass@brd.superproxy.io:22225"
+      proxy_enabled: false
+      timeout_sec: 10
+    - name: "mgstage"
+      enabled: true
+      # proxy_url: "http://user:pass@brd.superproxy.io:22225"
+      proxy_enabled: false
+      timeout_sec: 10
+    - name: "dmm"
+      enabled: false               # DMM often blocks aggressively
+      # proxy_url: "http://user:pass@brd.superproxy.io:22225"
+      proxy_enabled: false
+      timeout_sec: 10
+
+# ── Authentication ───────────────────────────────────────────────────────────
+# API keys can be overridden via env var AUTH_API_KEYS (comma-separated).
+auth:
+  api_keys:
+    # - "your-api-key-here"
+
+# ── Render / Deployment ─────────────────────────────────────────────────────
+render:
+  gomemlimit: "400MiB"
+  cold_start_tolerant: true
