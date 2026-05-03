@@ -44,20 +44,20 @@ type Scraper struct {
 // It runs a Cloudflare bypass pre-test; if the test fails, the scraper is
 // created with IsEnabled() returning false and a warning is logged.
 func New(config domain.ProxyConfig) *Scraper {
+	proxyURL := ""
+	if config.Enabled {
+		proxyURL = config.URL
+	}
+
 	s := &Scraper{
 		enabled:     true,
 		proxyConfig: config,
-		httpClient:  &http.Client{Timeout: 15 * time.Second},
+		httpClient:  scraper.NewCFClient(proxyURL),
 		baseURL:     baseURL,
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
-
-	proxyURL := ""
-	if config.Enabled {
-		proxyURL = config.URL
-	}
 
 	result, err := scraper.CFBypassTest(ctx, cfTestURL, proxyURL)
 	if err != nil || !result.Passed {
@@ -77,6 +77,16 @@ func (s *Scraper) IsEnabled() bool                       { return s.enabled }
 func (s *Scraper) RequiresCFBypass() bool                { return true }
 func (s *Scraper) GetProxyConfig() domain.ProxyConfig    { return s.proxyConfig }
 func (s *Scraper) FormatCode(code string) string         { return code }
+
+// SetProxyConfig updates the proxy configuration and recreates the CF client.
+func (s *Scraper) SetProxyConfig(pc domain.ProxyConfig) {
+	s.proxyConfig = pc
+	proxyURL := ""
+	if pc.Enabled {
+		proxyURL = pc.URL
+	}
+	s.httpClient = scraper.NewCFClient(proxyURL)
+}
 
 // Search scrapes javgg.net for the given code and returns video results.
 func (s *Scraper) Search(ctx context.Context, code string) ([]domain.VideoResult, error) {

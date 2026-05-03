@@ -143,6 +143,15 @@ func applyEnvOverrides(cfg *Config) {
 	if v := os.Getenv("AUTH_API_KEYS"); v != "" {
 		cfg.Auth.APIKeys = splitComma(v)
 	}
+
+	for i := range cfg.Scrapers.Sites {
+		site := &cfg.Scrapers.Sites[i]
+		envKey := "SCRAPER_" + strings.ToUpper(site.Name) + "_PROXY_URL"
+		if v := os.Getenv(envKey); v != "" {
+			site.ProxyURL = v
+			site.ProxyEnabled = true
+		}
+	}
 }
 
 // splitComma splits a comma-separated string, trimming whitespace.

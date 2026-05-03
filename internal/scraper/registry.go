@@ -3,6 +3,7 @@ package scraper
 import (
 	"sync"
 
+	"github.com/henry/javapi/internal/config"
 	"github.com/henry/javapi/internal/domain"
 )
 
@@ -41,4 +42,17 @@ func GetEnabled() []domain.Scraper {
 		}
 	}
 	return result
+}
+
+// ApplyConfig applies per-site proxy configuration to all registered scrapers.
+func ApplyConfig(sites []config.ScraperSiteConfig) {
+	mu.Lock()
+	defer mu.Unlock()
+	for _, site := range sites {
+		if s, ok := scrapers[site.Name]; ok {
+			if pc, hasSetter := s.(interface{ SetProxyConfig(domain.ProxyConfig) }); hasSetter {
+				pc.SetProxyConfig(domain.ProxyConfig{URL: site.ProxyURL, Enabled: site.ProxyEnabled})
+			}
+		}
+	}
 }

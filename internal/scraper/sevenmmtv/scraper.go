@@ -139,6 +139,17 @@ func (s *Scraper) RequiresCFBypass() bool { return true }
 // GetProxyConfig returns the proxy configuration for this scraper.
 func (s *Scraper) GetProxyConfig() domain.ProxyConfig { return s.proxyConfig }
 
+// SetProxyConfig updates the proxy configuration for this scraper.
+func (s *Scraper) SetProxyConfig(pc domain.ProxyConfig) {
+	s.proxyConfig = pc
+	if pc.Enabled && pc.URL != "" {
+		proxyURL, err := url.Parse(pc.URL)
+		if err == nil {
+			s.client.Transport = &http.Transport{Proxy: http.ProxyURL(proxyURL)}
+		}
+	}
+}
+
 // Search performs a two-phase scrape:
 //  1. POST search form → parse result links → find matching detail page
 //  2. GET detail page → extract video sources (iframe/video)

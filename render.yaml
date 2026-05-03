@@ -12,3 +12,17 @@ services:
         value: "6"
       - key: AUTH_API_KEYS
         sync: false
+      - key: SCRAPER_MISSAV_PROXY_URL
+        sync: false
+      - key: SCRAPER_HAYAV_PROXY_URL
+        sync: false
+      - key: SCRAPER_7MMTV_PROXY_URL
+        sync: false
+      - key: SCRAPER_JABLE_PROXY_URL
+        sync: false
+      - key: SCRAPER_JAVMENU_PROXY_URL
+        sync: false
+      - key: SCRAPER_JAVGG_PROXY_URL
+        sync: false
+      - key: SCRAPER_AV01_PROXY_URL
+        sync: false

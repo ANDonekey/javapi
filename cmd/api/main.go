@@ -16,6 +16,7 @@ import (
 	"github.com/henry/javapi/internal/cache"
 	"github.com/henry/javapi/internal/config"
 	"github.com/henry/javapi/internal/domain"
+	"github.com/henry/javapi/internal/scraper"
 	"github.com/henry/javapi/internal/handler"
 	"github.com/henry/javapi/internal/javdb"
 	myMiddleware "github.com/henry/javapi/internal/middleware"
@@ -35,6 +36,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("config: %v", err)
 	}
+
+	scraper.ApplyConfig(cfg.Scrapers.Sites)
 
 	javdbClient := javdb.NewClient(cfg.JavDB.BaseURL, cfg.JavDB.Middle, cfg.JavDB.Suffix)
 

@@ -22,6 +22,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/henry/javapi/internal/domain"
@@ -75,22 +76,26 @@ type Scraper struct {
 var _ domain.Scraper = (*Scraper)(nil)
 
 func init() {
-	scraper.Register(New())
+	scraper.Register(New(domain.ProxyConfig{}))
 }
 
-// New creates an AV01 scraper with sensible defaults (15s timeout, standard UA).
+// New creates an AV01 scraper with the given proxy configuration.
 // It runs a Cloudflare bypass pre-test; if the test fails, the scraper is
 // created with IsEnabled() returning false and a warning is logged.
-func New() *Scraper {
+func New(config domain.ProxyConfig) *Scraper {
+	client := &http.Client{Timeout: 15 * time.Second}
+	if config.Enabled && config.URL != "" {
+		proxyURL, err := url.Parse(config.URL)
+		if err == nil {
+			client.Transport = &http.Transport{Proxy: http.ProxyURL(proxyURL)}
+		}
+	}
+
 	s := &Scraper{
-		client: &http.Client{
-			Timeout: 15 * time.Second,
-		},
-		enabled: true,
-		proxyConfig: domain.ProxyConfig{
-			Enabled: false,
-		},
-		baseURL: baseURL,
+		client:      client,
+		enabled:     true,
+		proxyConfig: config,
+		baseURL:     baseURL,
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
@@ -139,6 +144,17 @@ func (s *Scraper) RequiresCFBypass() bool { return false }
 
 // GetProxyConfig returns the proxy configuration for this scraper.
 func (s *Scraper) GetProxyConfig() domain.ProxyConfig { return s.proxyConfig }
+
+// SetProxyConfig updates the proxy configuration for this scraper.
+func (s *Scraper) SetProxyConfig(pc domain.ProxyConfig) {
+	s.proxyConfig = pc
+	if pc.Enabled && pc.URL != "" {
+		proxyURL, err := url.Parse(pc.URL)
+		if err == nil {
+			s.client.Transport = &http.Transport{Proxy: http.ProxyURL(proxyURL)}
+		}
+	}
+}
 
 // Search queries the AV01 JSON API and returns video results matching the code.
 //

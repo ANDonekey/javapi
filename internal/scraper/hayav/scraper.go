@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
@@ -58,19 +59,21 @@ type Scraper struct {
 var _ domain.Scraper = (*Scraper)(nil)
 
 func init() {
-	scraper.Register(New())
+	scraper.Register(New(domain.ProxyConfig{}))
 }
 
 // New creates a HAYAV scraper with sensible defaults (15s timeout, standard UA).
-func New() *Scraper {
-	return &Scraper{
+func New(config domain.ProxyConfig) *Scraper {
+	s := &Scraper{
 		client: &http.Client{
 			Timeout: 15 * time.Second,
 		},
 		baseURL:     DefaultBaseURL,
 		enabled:     true,
-		proxyConfig: domain.ProxyConfig{Enabled: false},
+		proxyConfig: config,
 	}
+	s.applyProxy()
+	return s
 }
 
 // NewWithClient returns a Scraper that uses a custom http.Client and base URL.
@@ -99,6 +102,21 @@ func (s *Scraper) RequiresCFBypass() bool { return false }
 
 // GetProxyConfig returns the proxy configuration for this scraper.
 func (s *Scraper) GetProxyConfig() domain.ProxyConfig { return s.proxyConfig }
+
+// SetProxyConfig updates the proxy configuration for this scraper.
+func (s *Scraper) SetProxyConfig(pc domain.ProxyConfig) {
+	s.proxyConfig = pc
+	s.applyProxy()
+}
+
+func (s *Scraper) applyProxy() {
+	if s.proxyConfig.Enabled && s.proxyConfig.URL != "" {
+		proxyURL, err := url.Parse(s.proxyConfig.URL)
+		if err == nil {
+			s.client.Transport = &http.Transport{Proxy: http.ProxyURL(proxyURL)}
+		}
+	}
+}
 
 // Search fetches and parses the video page for the given JAV code.
 // It returns one or more VideoResults grouped by version.

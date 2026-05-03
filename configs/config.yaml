@@ -32,29 +32,32 @@ scrapers:
   user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
   max_concurrent: 6              # Render free-tier safe
   sites:
-    - name: "javdb"
+    - name: "missav"
       enabled: true
-      # proxy_url: "http://user:pass@brd.superproxy.io:22225"
+      proxy_enabled: false
+      timeout_sec: 15
+    - name: "jable"
+      enabled: true
       proxy_enabled: false
       timeout_sec: 10
-    - name: "javlibrary"
+    - name: "javmenu"
       enabled: true
-      # proxy_url: "http://user:pass@brd.superproxy.io:22225"
       proxy_enabled: false
       timeout_sec: 10
-    - name: "arzon"
+    - name: "hayav"
       enabled: true
-      # proxy_url: "http://user:pass@brd.superproxy.io:22225"
       proxy_enabled: false
       timeout_sec: 10
-    - name: "mgstage"
+    - name: "javgg"
       enabled: true
-      # proxy_url: "http://user:pass@brd.superproxy.io:22225"
       proxy_enabled: false
       timeout_sec: 10
-    - name: "dmm"
-      enabled: false               # DMM often blocks aggressively
-      # proxy_url: "http://user:pass@brd.superproxy.io:22225"
+    - name: "av01"
+      enabled: true
+      proxy_enabled: false
+      timeout_sec: 10
+    - name: "7mmtv"
+      enabled: true
       proxy_enabled: false
       timeout_sec: 10
 

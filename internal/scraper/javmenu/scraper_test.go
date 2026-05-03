@@ -17,12 +17,12 @@ import (
 // ---------------------------------------------------------------------------
 
 func TestName(t *testing.T) {
-	s := New(true, "", false)
+	s := New(true, domain.ProxyConfig{})
 	assert.Equal(t, "javmenu", s.Name())
 }
 
 func TestFormatCodeReturnsUnchanged(t *testing.T) {
-	s := New(true, "", false)
+	s := New(true, domain.ProxyConfig{})
 	tests := []string{"ABC-123", "abc123", "SSIS-001", "ABW-999", "raw code"}
 	for _, code := range tests {
 		assert.Equal(t, code, s.FormatCode(code), "FormatCode(%q)", code)
@@ -30,21 +30,21 @@ func TestFormatCodeReturnsUnchanged(t *testing.T) {
 }
 
 func TestIsEnabled(t *testing.T) {
-	assert.True(t, New(true, "", false).IsEnabled())
-	assert.False(t, New(false, "", false).IsEnabled())
+	assert.True(t, New(true, domain.ProxyConfig{}).IsEnabled())
+	assert.False(t, New(false, domain.ProxyConfig{}).IsEnabled())
 }
 
 func TestRequiresCFBypass(t *testing.T) {
-	assert.True(t, New(true, "", false).RequiresCFBypass())
+	assert.True(t, New(true, domain.ProxyConfig{}).RequiresCFBypass())
 }
 
 func TestGetProxyConfig(t *testing.T) {
-	s := New(true, "http://proxy:8080", true)
+	s := New(true, domain.ProxyConfig{URL: "http://proxy:8080", Enabled: true})
 	pc := s.GetProxyConfig()
 	assert.Equal(t, "http://proxy:8080", pc.URL)
 	assert.True(t, pc.Enabled)
 
-	s2 := New(true, "", false)
+	s2 := New(true, domain.ProxyConfig{})
 	pc2 := s2.GetProxyConfig()
 	assert.Equal(t, "", pc2.URL)
 	assert.False(t, pc2.Enabled)
@@ -144,17 +144,25 @@ func newTestServer(handler http.HandlerFunc) *httptest.Server {
 }
 
 func testScraperForServer(srv *httptest.Server, enabled bool, proxyEnabled bool) *Scraper {
-	transport := &http.Transport{}
+	pc := domain.ProxyConfig{}
 	if proxyEnabled {
-		transport.Proxy = http.ProxyURL(nil)
+		transport := &http.Transport{Proxy: http.ProxyURL(nil)}
+		pc.Enabled = true
+		return &Scraper{
+			client: &http.Client{
+				Timeout:   5 * time.Second,
+				Transport: transport,
+			},
+			enabled:     enabled,
+			proxyConfig: pc,
+		}
 	}
 	return &Scraper{
 		client: &http.Client{
 			Timeout:   5 * time.Second,
-			Transport: transport,
 		},
-		enabled:      enabled,
-		proxyEnabled: proxyEnabled,
+		enabled:     enabled,
+		proxyConfig: pc,
 	}
 }
 
@@ -200,8 +208,9 @@ func TestSearchSeoMainVideo(t *testing.T) {
 	defer srv.Close()
 
 	s := &Scraper{
-		client:   &http.Client{Timeout: 5 * time.Second, Transport: &testTransport{target: srv.URL}},
-		enabled:  true,
+		client:      &http.Client{Timeout: 5 * time.Second, Transport: &testTransport{target: srv.URL}},
+		enabled:     true,
+		proxyConfig: domain.ProxyConfig{},
 	}
 
 	results, err := s.Search(context.Background(), "ABC-123")
@@ -409,7 +418,7 @@ func TestSearchContextCancelled(t *testing.T) {
 }
 
 func TestSearchDisabledScraper(t *testing.T) {
-	s := New(false, "", false)
+	s := New(false, domain.ProxyConfig{})
 	assert.False(t, s.IsEnabled())
 }
 
@@ -441,7 +450,7 @@ func TestSearchEmptyDataM3U8Skipped(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestInitRegistersScraper(t *testing.T) {
-	s := New(true, "", false)
+	s := New(true, domain.ProxyConfig{})
 	assert.Equal(t, "javmenu", s.Name())
 	assert.True(t, s.IsEnabled())
 	assert.True(t, s.RequiresCFBypass())

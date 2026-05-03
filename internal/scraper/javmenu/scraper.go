@@ -23,33 +23,27 @@ var _ domain.Scraper = (*Scraper)(nil)
 
 // Scraper implements domain.Scraper for javmenu.com.
 type Scraper struct {
-	client       *http.Client
-	enabled      bool
-	proxyURL     string
-	proxyEnabled bool
+	client      *http.Client
+	enabled     bool
+	proxyConfig domain.ProxyConfig
 }
 
 // New creates a new javmenu Scraper with the given configuration.
-//
-// If proxyEnabled is true, HTTP requests are routed through proxyURL.
-// To disable the scraper (e.g., after CF bypass test failure), pass enabled=false.
-func New(enabled bool, proxyURL string, proxyEnabled bool) *Scraper {
-	transport := &http.Transport{}
-	if proxyEnabled && proxyURL != "" {
-		if pu, err := url.Parse(proxyURL); err == nil {
-			transport.Proxy = http.ProxyURL(pu)
-		}
-	}
-
-	return &Scraper{
+func New(enabled bool, config domain.ProxyConfig) *Scraper {
+	s := &Scraper{
 		client: &http.Client{
-			Timeout:   defaultTimeout,
-			Transport: transport,
+			Timeout: defaultTimeout,
 		},
-		enabled:      enabled,
-		proxyURL:     proxyURL,
-		proxyEnabled: proxyEnabled,
+		enabled:     enabled,
+		proxyConfig: config,
 	}
+	s.applyProxy()
+	return s
+}
+
+// NewWithProxy creates an enabled scraper with the given proxy configuration.
+func NewWithProxy(config domain.ProxyConfig) *Scraper {
+	return New(true, config)
 }
 
 // Name returns the unique scraper identifier.
@@ -65,10 +59,20 @@ func (s *Scraper) IsEnabled() bool { return s.enabled }
 func (s *Scraper) RequiresCFBypass() bool { return true }
 
 // GetProxyConfig returns the proxy configuration for this scraper.
-func (s *Scraper) GetProxyConfig() domain.ProxyConfig {
-	return domain.ProxyConfig{
-		URL:     s.proxyURL,
-		Enabled: s.proxyEnabled,
+func (s *Scraper) GetProxyConfig() domain.ProxyConfig { return s.proxyConfig }
+
+// SetProxyConfig updates the proxy configuration for this scraper.
+func (s *Scraper) SetProxyConfig(pc domain.ProxyConfig) {
+	s.proxyConfig = pc
+	s.applyProxy()
+}
+
+func (s *Scraper) applyProxy() {
+	if s.proxyConfig.Enabled && s.proxyConfig.URL != "" {
+		proxyURL, err := url.Parse(s.proxyConfig.URL)
+		if err == nil {
+			s.client.Transport = &http.Transport{Proxy: http.ProxyURL(proxyURL)}
+		}
 	}
 }
 
@@ -329,5 +333,5 @@ func isCFBlocked(body string) bool {
 }
 
 func init() {
-	scraper.Register(New(true, "", false))
+	scraper.Register(New(true, domain.ProxyConfig{}))
 }

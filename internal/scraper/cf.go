@@ -6,13 +6,25 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/RomainMichau/CycleTLS/cycletls"
 	"github.com/RomainMichau/cloudscraper_go/cloudscraper"
+	"github.com/henry/javapi/internal/domain"
 )
+
+// ProxyFromEnv reads SCRAPER_PROXY_URL from the environment.
+// Returns a ProxyConfig with Enabled=true if the env var is set.
+func ProxyFromEnv() domain.ProxyConfig {
+	url := os.Getenv("SCRAPER_PROXY_URL")
+	if url != "" {
+		return domain.ProxyConfig{URL: url, Enabled: true}
+	}
+	return domain.ProxyConfig{}
+}
 
 // FirefoxUA is a browser-like Firefox user agent matching CycleTLS TLS fingerprint.
 const FirefoxUA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:150.0) Gecko/20100101 Firefox/150.0"

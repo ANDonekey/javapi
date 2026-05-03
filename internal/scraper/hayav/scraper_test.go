@@ -15,7 +15,7 @@ import (
 )
 
 func TestFormatCode(t *testing.T) {
-	s := New()
+	s := New(domain.ProxyConfig{})
 	tests := []struct {
 		input string
 	}{
@@ -36,30 +36,30 @@ func TestFormatCode(t *testing.T) {
 }
 
 func TestName(t *testing.T) {
-	s := New()
+	s := New(domain.ProxyConfig{})
 	assert.Equal(t, Name, s.Name())
 	assert.Equal(t, "hayav", s.Name())
 }
 
 func TestIsEnabled(t *testing.T) {
-	s := New()
+	s := New(domain.ProxyConfig{})
 	assert.True(t, s.IsEnabled())
 }
 
 func TestRequiresCFBypass(t *testing.T) {
-	s := New()
+	s := New(domain.ProxyConfig{})
 	assert.False(t, s.RequiresCFBypass())
 }
 
 func TestGetProxyConfig(t *testing.T) {
-	s := New()
+	s := New(domain.ProxyConfig{})
 	cfg := s.GetProxyConfig()
 	assert.False(t, cfg.Enabled)
 	assert.Empty(t, cfg.URL)
 }
 
 func TestImplementsScraperInterface(t *testing.T) {
-	var s domain.Scraper = New()
+	var s domain.Scraper = New(domain.ProxyConfig{})
 	assert.NotNil(t, s)
 	assert.Equal(t, "hayav", s.Name())
 }

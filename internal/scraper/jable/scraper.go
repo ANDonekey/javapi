@@ -51,7 +51,6 @@ func init() {
 		client: &http.Client{
 			Timeout: 10 * time.Second,
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
-				// Allow redirects; carry headers across
 				if len(via) >= 10 {
 					return fmt.Errorf("too many redirects")
 				}
@@ -61,6 +60,7 @@ func init() {
 		enabled: true,
 	}
 
+	s.SetProxyConfig(scraper.ProxyFromEnv())
 	scraper.Register(s)
 }
 

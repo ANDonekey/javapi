@@ -70,6 +70,16 @@ func (s *MISSAVScraper) RequiresCFBypass() bool    { return true }
 func (s *MISSAVScraper) GetProxyConfig() domain.ProxyConfig { return s.proxyConfig }
 func (s *MISSAVScraper) FormatCode(code string) string      { return code }
 
+// SetProxyConfig updates the proxy configuration and recreates the CF client.
+func (s *MISSAVScraper) SetProxyConfig(pc domain.ProxyConfig) {
+	s.proxyConfig = pc
+	proxyURL := ""
+	if pc.Enabled {
+		proxyURL = pc.URL
+	}
+	s.httpClient = scraper.NewCFClient(proxyURL)
+}
+
 // Search scrapes missav.ws for the given code and returns video results.
 // It detects subtitle (cnsub) and mosaic_reduce versions via CSS selectors.
 func (s *MISSAVScraper) Search(ctx context.Context, code string) ([]domain.VideoResult, error) {
