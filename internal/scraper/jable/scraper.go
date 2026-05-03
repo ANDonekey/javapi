@@ -470,6 +470,9 @@ func isValidPlayerURL(rawURL string) bool {
 		strings.Contains(lower, "tracking") || strings.Contains(lower, "analytics") {
 		return false
 	}
+	if strings.Contains(lower, "%query%") || strings.Contains(lower, "/search/") {
+		return false
+	}
 	return true
 }
 
