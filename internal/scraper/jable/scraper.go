@@ -464,16 +464,13 @@ func isValidPlayerURL(rawURL string) bool {
 		return false
 	}
 	lower := strings.ToLower(rawURL)
-	if strings.Contains(lower, ".m3u8") || strings.Contains(lower, ".mp4") || strings.Contains(lower, ".ts") ||
-		strings.Contains(lower, "/hls/") || strings.Contains(lower, "/embed/") || strings.Contains(lower, "/player/") ||
-		strings.Contains(lower, "mushroomtrack.com") || strings.Contains(lower, "surrit.com") {
-		return true
-	}
 	if strings.Contains(lower, "labadena") || strings.Contains(lower, "bluetraffic") ||
-		strings.Contains(lower, "smartpop") || strings.Contains(lower, "subid") || strings.Contains(lower, "/api/spots") {
+		strings.Contains(lower, "smartpop") || strings.Contains(lower, "subid") ||
+		strings.Contains(lower, "/api/spots") || strings.Contains(lower, "/api/ads") ||
+		strings.Contains(lower, "tracking") || strings.Contains(lower, "analytics") {
 		return false
 	}
-	return false
+	return true
 }
 
 // notFoundResult builds a not-found VideoResult slice.

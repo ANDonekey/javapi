@@ -186,7 +186,7 @@ func (s *MISSAVScraper) Search(ctx context.Context, code string) ([]domain.Video
 	}
 	results = append(results, original)
 
-	if hasSub && len(sources) > 0 {
+	if hasSub && len(sources) > 0 && !hasLeak {
 		results = append(results, domain.VideoResult{
 			SiteName:     siteName,
 			Status:       domain.StatusSuccess,
@@ -269,7 +269,12 @@ func isVideoDomain(rawURL string) bool {
 		return false
 	}
 	host := strings.ToLower(u.Hostname())
-	for _, s := range []string{"missav", "asg.to", "avmeet", "avplayer", "player", "m3u8", "embed", "stream", "cdn"} {
+	for _, s := range []string{"bluetraffic", "smartpop", "labadena", "subid", "tracking", "adserver", "popup", "ads."} {
+		if strings.Contains(host, s) {
+			return false
+		}
+	}
+	for _, s := range []string{"missav", "asg.to", "avmeet", "avplayer", "player", "m3u8", "embed", "stream", "cdn", "surrit"} {
 		if strings.Contains(host, s) {
 			return true
 		}

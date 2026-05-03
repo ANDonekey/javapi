@@ -279,13 +279,11 @@ func TestSearchWithBothVersions(t *testing.T) {
 	s := newTestScraper(srv.URL)
 	results, err := s.Search(context.Background(), "ABC-123")
 	require.NoError(t, err)
-	require.Len(t, results, 3)
+	require.Len(t, results, 2)
 
 	assert.Equal(t, domain.VersionOriginal, results[0].Version)
-	assert.Equal(t, domain.VersionCNSub, results[1].Version)
-	assert.Equal(t, domain.VersionMosaicReduce, results[2].Version)
-	assert.True(t, results[1].Subtitle)
-	assert.True(t, results[2].Leak)
+	assert.Equal(t, domain.VersionMosaicReduce, results[1].Version)
+	assert.True(t, results[1].Leak)
 }
 
 func TestSearch404(t *testing.T) {
