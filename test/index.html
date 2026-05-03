@@ -1,0 +1,1377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JAV Search API Tester</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            /* Color Palette - Dark Theme */
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-tertiary: #1a1a26;
+            --bg-elevated: #252535;
+            
+            --text-primary: #f0f0f5;
+            --text-secondary: #a0a0b0;
+            --text-muted: #606070;
+            
+            --accent-primary: #ff6b6b;
+            --accent-secondary: #4ecdc4;
+            --accent-tertiary: #ffe66d;
+            
+            --success: #4ade80;
+            --warning: #fbbf24;
+            --error: #f87171;
+            --info: #60a5fa;
+            
+            --gradient-primary: linear-gradient(135deg, #ff6b6b 0%, #4ecdc4 100%);
+            --gradient-dark: linear-gradient(180deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
+            
+            /* Spacing */
+            --space-xs: 0.25rem;
+            --space-sm: 0.5rem;
+            --space-md: 1rem;
+            --space-lg: 1.5rem;
+            --space-xl: 2rem;
+            --space-2xl: 3rem;
+            
+            /* Typography */
+            --font-display: 'Space Grotesk', sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+            
+            /* Border Radius */
+            --radius-sm: 6px;
+            --radius-md: 12px;
+            --radius-lg: 16px;
+            --radius-xl: 24px;
+            
+            /* Shadows */
+            --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
+            --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
+            --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.5);
+            --shadow-glow: 0 0 30px rgba(255, 107, 107, 0.3);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: var(--font-display);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        /* Animated Background */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(ellipse at 20% 20%, rgba(255, 107, 107, 0.08) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 80%, rgba(78, 205, 196, 0.08) 0%, transparent 50%),
+                radial-gradient(ellipse at 50% 50%, rgba(255, 230, 109, 0.03) 0%, transparent 70%);
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        /* Noise Texture Overlay */
+        body::after {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+            opacity: 0.02;
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        /* Container */
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: var(--space-lg);
+        }
+
+        /* Header */
+        header {
+            text-align: center;
+            padding: var(--space-2xl) 0;
+            position: relative;
+        }
+
+        .logo {
+            font-size: clamp(2rem, 5vw, 3.5rem);
+            font-weight: 700;
+            background: var(--gradient-primary);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -0.02em;
+            margin-bottom: var(--space-sm);
+        }
+
+        .tagline {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+            font-weight: 300;
+        }
+
+        /* Settings Panel */
+        .settings-panel {
+            background: var(--bg-secondary);
+            border: 1px solid var(--bg-elevated);
+            border-radius: var(--radius-lg);
+            padding: var(--space-lg);
+            margin-bottom: var(--space-xl);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .settings-panel::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: var(--gradient-primary);
+        }
+
+        .settings-title {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: var(--space-md);
+            display: flex;
+            align-items: center;
+            gap: var(--space-sm);
+        }
+
+        .settings-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: var(--space-md);
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-xs);
+        }
+
+        .input-group label {
+            font-size: 0.8rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .input-field {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--bg-elevated);
+            border-radius: var(--radius-md);
+            padding: var(--space-md);
+            color: var(--text-primary);
+            font-family: var(--font-mono);
+            font-size: 0.9rem;
+            transition: all 0.2s ease;
+        }
+
+        .input-field:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 0 3px rgba(255, 107, 107, 0.1);
+        }
+
+        .input-field::placeholder {
+            color: var(--text-muted);
+        }
+
+        /* Search Section */
+        .search-section {
+            background: var(--bg-secondary);
+            border-radius: var(--radius-xl);
+            padding: var(--space-xl);
+            margin-bottom: var(--space-xl);
+            box-shadow: var(--shadow-md);
+            position: relative;
+        }
+
+        .search-container {
+            display: flex;
+            gap: var(--space-md);
+            flex-wrap: wrap;
+        }
+
+        .search-input-wrapper {
+            flex: 1;
+            min-width: 280px;
+            position: relative;
+        }
+
+        .search-input {
+            width: 100%;
+            background: var(--bg-tertiary);
+            border: 2px solid var(--bg-elevated);
+            border-radius: var(--radius-lg);
+            padding: var(--space-lg) var(--space-xl);
+            padding-left: 3.5rem;
+            color: var(--text-primary);
+            font-family: var(--font-display);
+            font-size: 1.1rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+            box-shadow: var(--shadow-glow);
+        }
+
+        .search-icon {
+            position: absolute;
+            left: var(--space-lg);
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-muted);
+            font-size: 1.25rem;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: var(--space-sm);
+            padding: var(--space-md) var(--space-xl);
+            border: none;
+            border-radius: var(--radius-lg);
+            font-family: var(--font-display);
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            transition: left 0.5s ease;
+        }
+
+        .btn:hover::before {
+            left: 100%;
+        }
+
+        .btn-primary {
+            background: var(--gradient-primary);
+            color: white;
+            box-shadow: var(--shadow-md);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg), var(--shadow-glow);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-secondary {
+            background: var(--bg-elevated);
+            color: var(--text-primary);
+            border: 1px solid var(--bg-elevated);
+        }
+
+        .btn-secondary:hover {
+            background: var(--bg-tertiary);
+            border-color: var(--accent-secondary);
+        }
+
+        .btn-sm {
+            padding: var(--space-sm) var(--space-md);
+            font-size: 0.875rem;
+        }
+
+        /* Loading States */
+        .loading-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(10, 10, 15, 0.9);
+            backdrop-filter: blur(8px);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            gap: var(--space-lg);
+        }
+
+        .loading-overlay.active {
+            display: flex;
+        }
+
+        .spinner {
+            width: 60px;
+            height: 60px;
+            position: relative;
+        }
+
+        .spinner::before,
+        .spinner::after {
+            content: '';
+            position: absolute;
+            border-radius: 50%;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        .spinner::before {
+            width: 100%;
+            height: 100%;
+            background: var(--gradient-primary);
+            opacity: 0.3;
+            animation-delay: 0s;
+        }
+
+        .spinner::after {
+            width: 60%;
+            height: 60%;
+            top: 20%;
+            left: 20%;
+            background: var(--gradient-primary);
+            opacity: 0.6;
+            animation-delay: 0.5s;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 0.3; }
+            50% { transform: scale(1.2); opacity: 0.8; }
+        }
+
+        .loading-text {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+            animation: fadeInOut 2s ease-in-out infinite;
+        }
+
+        @keyframes fadeInOut {
+            0%, 100% { opacity: 0.5; }
+            50% { opacity: 1; }
+        }
+
+        /* Results Section */
+        .results-section {
+            display: none;
+            animation: slideUp 0.5s ease;
+        }
+
+        .results-section.active {
+            display: block;
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Movie Info Card */
+        .movie-card {
+            background: var(--bg-secondary);
+            border-radius: var(--radius-xl);
+            overflow: hidden;
+            margin-bottom: var(--space-xl);
+            box-shadow: var(--shadow-md);
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 0;
+        }
+
+        @media (max-width: 768px) {
+            .movie-card {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .movie-cover {
+            position: relative;
+            aspect-ratio: 2/3;
+            overflow: hidden;
+        }
+
+        .movie-cover img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transition: transform 0.5s ease;
+        }
+
+        .movie-card:hover .movie-cover img {
+            transform: scale(1.05);
+        }
+
+        .movie-cover::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(to top, rgba(10,10,15,0.9) 0%, transparent 50%);
+            pointer-events: none;
+        }
+
+        .score-badge {
+            position: absolute;
+            top: var(--space-md);
+            right: var(--space-md);
+            background: var(--gradient-primary);
+            color: white;
+            padding: var(--space-xs) var(--space-md);
+            border-radius: var(--radius-xl);
+            font-weight: 700;
+            font-size: 0.9rem;
+            z-index: 1;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .movie-info {
+            padding: var(--space-xl);
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-md);
+        }
+
+        .movie-title {
+            font-size: clamp(1.5rem, 3vw, 2.25rem);
+            font-weight: 700;
+            line-height: 1.2;
+            color: var(--text-primary);
+        }
+
+        .movie-original-title {
+            font-size: 1rem;
+            color: var(--text-secondary);
+            font-weight: 400;
+        }
+
+        .movie-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: var(--space-md);
+        }
+
+        .meta-item {
+            display: flex;
+            align-items: center;
+            gap: var(--space-xs);
+            background: var(--bg-tertiary);
+            padding: var(--space-sm) var(--space-md);
+            border-radius: var(--radius-md);
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+
+        .meta-item strong {
+            color: var(--accent-secondary);
+        }
+
+        .actors-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: var(--space-sm);
+        }
+
+        .actor-tag {
+            background: var(--bg-elevated);
+            color: var(--text-primary);
+            padding: var(--space-sm) var(--space-md);
+            border-radius: var(--radius-xl);
+            font-size: 0.875rem;
+            font-weight: 500;
+            border: 1px solid transparent;
+            transition: all 0.2s ease;
+        }
+
+        .actor-tag:hover {
+            border-color: var(--accent-primary);
+            background: var(--bg-tertiary);
+        }
+
+        .movie-summary {
+            color: var(--text-secondary);
+            line-height: 1.7;
+            font-size: 0.95rem;
+        }
+
+        .tags-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: var(--space-xs);
+        }
+
+        .tag {
+            background: rgba(78, 205, 196, 0.1);
+            color: var(--accent-secondary);
+            padding: var(--space-xs) var(--space-sm);
+            border-radius: var(--radius-sm);
+            font-size: 0.75rem;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        /* Video Section */
+        .video-section {
+            background: var(--bg-secondary);
+            border-radius: var(--radius-xl);
+            overflow: hidden;
+            box-shadow: var(--shadow-md);
+        }
+
+        .video-header {
+            background: var(--bg-tertiary);
+            padding: var(--space-lg) var(--space-xl);
+            border-bottom: 1px solid var(--bg-elevated);
+        }
+
+        .video-header h2 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: var(--space-sm);
+        }
+
+        .video-player-container {
+            position: relative;
+            background: #000;
+            aspect-ratio: 16/9;
+        }
+
+        #videoPlayer {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        .video-placeholder {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: var(--space-md);
+            color: var(--text-muted);
+            background: linear-gradient(135deg, var(--bg-tertiary) 0%, var(--bg-elevated) 100%);
+        }
+
+        .video-placeholder-icon {
+            font-size: 4rem;
+            opacity: 0.5;
+        }
+
+        /* Source Selector */
+        .sources-list {
+            padding: var(--space-lg);
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-md);
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .source-item {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--bg-elevated);
+            border-radius: var(--radius-lg);
+            padding: var(--space-lg);
+            transition: all 0.2s ease;
+            position: relative;
+        }
+
+        .source-item:hover {
+            border-color: var(--accent-primary);
+            transform: translateX(4px);
+        }
+
+        .source-item.success {
+            border-left: 3px solid var(--success);
+        }
+
+        .source-item.error {
+            border-left: 3px solid var(--error);
+            opacity: 0.7;
+        }
+
+        .source-item.timeout {
+            border-left: 3px solid var(--warning);
+            opacity: 0.7;
+        }
+
+        .source-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: var(--space-sm);
+            flex-wrap: wrap;
+            gap: var(--space-sm);
+        }
+
+        .source-name {
+            font-weight: 600;
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            gap: var(--space-sm);
+        }
+
+        .source-version {
+            background: var(--bg-elevated);
+            color: var(--text-secondary);
+            padding: var(--space-xs) var(--space-sm);
+            border-radius: var(--radius-sm);
+            font-size: 0.75rem;
+            font-weight: 500;
+            text-transform: uppercase;
+        }
+
+        .source-version.subtitle {
+            background: rgba(78, 205, 196, 0.2);
+            color: var(--accent-secondary);
+        }
+
+        .source-status {
+            display: flex;
+            align-items: center;
+            gap: var(--space-xs);
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        .status-dot.success { background: var(--success); box-shadow: 0 0 8px var(--success); }
+        .status-dot.error { background: var(--error); }
+        .status-dot.timeout { background: var(--warning); }
+
+        .source-actions {
+            display: flex;
+            gap: var(--space-sm);
+            flex-wrap: wrap;
+            margin-top: var(--space-md);
+        }
+
+        .video-sources-count {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-top: var(--space-xs);
+        }
+
+        /* Error States */
+        .error-alert {
+            background: rgba(248, 113, 113, 0.1);
+            border: 1px solid var(--error);
+            border-radius: var(--radius-md);
+            padding: var(--space-lg);
+            margin-bottom: var(--space-lg);
+            display: flex;
+            align-items: center;
+            gap: var(--space-md);
+        }
+
+        .error-alert-icon {
+            font-size: 1.5rem;
+        }
+
+        .error-alert-content {
+            flex: 1;
+        }
+
+        .error-alert-title {
+            font-weight: 600;
+            color: var(--error);
+            margin-bottom: var(--space-xs);
+        }
+
+        .error-alert-message {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: var(--space-2xl);
+            color: var(--text-muted);
+        }
+
+        .empty-state-icon {
+            font-size: 4rem;
+            margin-bottom: var(--space-lg);
+            opacity: 0.5;
+        }
+
+        /* Cache Info */
+        .cache-info {
+            display: flex;
+            align-items: center;
+            gap: var(--space-sm);
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-top: var(--space-md);
+        }
+
+        .cache-badge {
+            background: var(--bg-elevated);
+            padding: var(--space-xs) var(--space-sm);
+            border-radius: var(--radius-sm);
+        }
+
+        .cache-badge.hit {
+            background: rgba(74, 222, 128, 0.1);
+            color: var(--success);
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-tertiary);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--bg-elevated);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--text-muted);
+        }
+
+        /* Toast Notifications */
+        .toast-container {
+            position: fixed;
+            bottom: var(--space-xl);
+            right: var(--space-xl);
+            z-index: 1001;
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-md);
+        }
+
+        .toast {
+            background: var(--bg-secondary);
+            border: 1px solid var(--bg-elevated);
+            border-radius: var(--radius-md);
+            padding: var(--space-md) var(--space-lg);
+            box-shadow: var(--shadow-lg);
+            display: flex;
+            align-items: center;
+            gap: var(--space-md);
+            animation: slideInRight 0.3s ease;
+            max-width: 400px;
+        }
+
+        @keyframes slideInRight {
+            from { opacity: 0; transform: translateX(100%); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        .toast.success { border-left: 3px solid var(--success); }
+        .toast.error { border-left: 3px solid var(--error); }
+        .toast.info { border-left: 3px solid var(--info); }
+
+        /* Responsive */
+        @media (max-width: 640px) {
+            .container {
+                padding: var(--space-md);
+            }
+
+            .search-container {
+                flex-direction: column;
+            }
+
+            .btn {
+                width: 100%;
+            }
+
+            .movie-info {
+                padding: var(--space-lg);
+            }
+
+            .sources-list {
+                padding: var(--space-md);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="spinner"></div>
+        <div class="loading-text">Searching...</div>
+    </div>
+
+    <div class="toast-container" id="toastContainer"></div>
+
+    <div class="container">
+        <header>
+            <h1 class="logo">JAV Search API</h1>
+            <p class="tagline">Test your API with style</p>
+        </header>
+
+        <div class="settings-panel">
+            <div class="settings-title">
+                <span>⚙️</span>
+                Configuration
+            </div>
+            <div class="settings-grid">
+                <div class="input-group">
+                    <label for="apiBaseUrl">API Base URL</label>
+                    <input 
+                        type="text" 
+                        id="apiBaseUrl" 
+                        class="input-field" 
+                        placeholder="Leave empty for same-origin or enter Render URL"
+                    >
+                </div>
+                <div class="input-group">
+                    <label for="apiKey">API Key</label>
+                    <input 
+                        type="password" 
+                        id="apiKey" 
+                        class="input-field" 
+                        placeholder="Enter your API key"
+                    >
+                </div>
+            </div>
+        </div>
+
+        <div class="search-section">
+            <div class="search-container">
+                <div class="search-input-wrapper">
+                    <span class="search-icon">🔍</span>
+                    <input 
+                        type="text" 
+                        id="searchInput" 
+                        class="search-input" 
+                        placeholder="Enter JAV code (e.g., ABC-123)"
+                        autocomplete="off"
+                    >
+                </div>
+                <button class="btn btn-primary" id="searchBtn" onclick="performSearch()">
+                    <span>🔎</span>
+                    Search
+                </button>
+            </div>
+        </div>
+
+        <div id="errorContainer"></div>
+
+        <div class="results-section" id="resultsSection">
+            <div class="movie-card" id="movieCard">
+                <div class="movie-cover">
+                    <img id="movieCover" src="" alt="Movie Cover">
+                    <div class="score-badge" id="movieScore"></div>
+                </div>
+                <div class="movie-info">
+                    <h2 class="movie-title" id="movieTitle"></h2>
+                    <p class="movie-original-title" id="movieOriginalTitle"></p>
+                    
+                    <div class="movie-meta" id="movieMeta"></div>
+                    
+                    <div class="actors-list" id="actorsList"></div>
+                    
+                    <p class="movie-summary" id="movieSummary"></p>
+                    
+                    <div class="tags-list" id="tagsList"></div>
+                    
+                    <div class="cache-info" id="cacheInfo"></div>
+                </div>
+            </div>
+
+            <div class="video-section">
+                <div class="video-header">
+                    <h2>📺 Video Sources</h2>
+                </div>
+                
+                <div class="video-player-container">
+                    <video id="videoPlayer" controls></video>
+                    <div class="video-placeholder" id="videoPlaceholder">
+                        <div class="video-placeholder-icon">▶️</div>
+                        <p>Select a source to play</p>
+                    </div>
+                </div>
+
+                <div class="sources-list" id="sourcesList"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // State
+        let currentHls = null;
+        let searchResults = null;
+
+        // DOM Elements
+        const searchInput = document.getElementById('searchInput');
+        const searchBtn = document.getElementById('searchBtn');
+        const apiBaseUrlInput = document.getElementById('apiBaseUrl');
+        const apiKeyInput = document.getElementById('apiKey');
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        const resultsSection = document.getElementById('resultsSection');
+        const errorContainer = document.getElementById('errorContainer');
+        const toastContainer = document.getElementById('toastContainer');
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadSettings();
+            
+            // Enter key to search
+            searchInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') performSearch();
+            });
+
+            // Auto-save settings
+            apiBaseUrlInput.addEventListener('change', saveSettings);
+            apiKeyInput.addEventListener('change', saveSettings);
+        });
+
+        // Settings Management
+        function loadSettings() {
+            const settings = localStorage.getItem('javApiSettings');
+            if (settings) {
+                const parsed = JSON.parse(settings);
+                apiBaseUrlInput.value = parsed.baseUrl || '';
+                apiKeyInput.value = parsed.apiKey || '';
+            }
+        }
+
+        function saveSettings() {
+            const settings = {
+                baseUrl: apiBaseUrlInput.value.trim(),
+                apiKey: apiKeyInput.value.trim()
+            };
+            localStorage.setItem('javApiSettings', JSON.stringify(settings));
+            showToast('Settings saved', 'success');
+        }
+
+        // API Helpers
+        function getApiBaseUrl() {
+            return apiBaseUrlInput.value.trim() || '';
+        }
+
+        function getApiKey() {
+            return apiKeyInput.value.trim();
+        }
+
+        function buildUrl(endpoint) {
+            const baseUrl = getApiBaseUrl();
+            if (baseUrl) {
+                return `${baseUrl.replace(/\/$/, '')}${endpoint}`;
+            }
+            return endpoint;
+        }
+
+        // Search
+        async function performSearch() {
+            const code = searchInput.value.trim();
+            
+            if (!code) {
+                showError('Please enter a JAV code');
+                return;
+            }
+
+            if (!getApiKey()) {
+                showError('Please enter your API key in settings');
+                return;
+            }
+
+            clearError();
+            showLoading(true);
+
+            try {
+                const response = await fetch(buildUrl(`/api/v1/search?code=${encodeURIComponent(code)}`), {
+                    method: 'GET',
+                    headers: {
+                        'X-API-Key': getApiKey(),
+                        'Accept': 'application/json'
+                    }
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                searchResults = await response.json();
+                displayResults(searchResults);
+                showToast('Search completed successfully', 'success');
+            } catch (error) {
+                showError(error.message || 'Failed to perform search');
+                console.error('Search error:', error);
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        // Display Results
+        function displayResults(data) {
+            resultsSection.classList.add('active');
+
+            // Display movie info
+            if (data.movie) {
+                displayMovieInfo(data.movie, data.cache);
+            }
+
+            // Display video sources
+            if (data.videos && data.videos.length > 0) {
+                displayVideoSources(data.videos);
+            } else {
+                document.getElementById('sourcesList').innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📭</div>
+                        <p>No video sources found</p>
+                    </div>
+                `;
+            }
+        }
+
+        function displayMovieInfo(movie, cache) {
+            // Cover
+            const coverUrl = movie.cover_url || movie.thumb_url || '';
+            document.getElementById('movieCover').src = coverUrl;
+            document.getElementById('movieCover').alt = movie.title || 'Movie Cover';
+
+            // Score badge
+            const scoreEl = document.getElementById('movieScore');
+            if (movie.score) {
+                scoreEl.textContent = `★ ${movie.score.toFixed(1)}`;
+                scoreEl.style.display = 'block';
+            } else {
+                scoreEl.style.display = 'none';
+            }
+
+            // Titles
+            document.getElementById('movieTitle').textContent = movie.title || 'Unknown Title';
+            document.getElementById('movieOriginalTitle').textContent = movie.origin_title || '';
+
+            // Meta info
+            const metaContainer = document.getElementById('movieMeta');
+            metaContainer.innerHTML = '';
+            
+            if (movie.release_date) {
+                metaContainer.innerHTML += `
+                    <div class="meta-item">
+                        <span>📅</span>
+                        <strong>${formatDate(movie.release_date)}</strong>
+                    </div>
+                `;
+            }
+            
+            if (movie.duration) {
+                metaContainer.innerHTML += `
+                    <div class="meta-item">
+                        <span>⏱️</span>
+                        <strong>${movie.duration} min</strong>
+                    </div>
+                `;
+            }
+            
+            if (movie.magnets_count) {
+                metaContainer.innerHTML += `
+                    <div class="meta-item">
+                        <span>🧲</span>
+                        <strong>${movie.magnets_count} magnets</strong>
+                    </div>
+                `;
+            }
+
+            // Actors
+            const actorsContainer = document.getElementById('actorsList');
+            actorsContainer.innerHTML = '';
+            if (movie.actors && movie.actors.length > 0) {
+                movie.actors.forEach(actor => {
+                    actorsContainer.innerHTML += `<span class="actor-tag">${escapeHtml(actor)}</span>`;
+                });
+            }
+
+            // Summary
+            document.getElementById('movieSummary').textContent = movie.summary || '';
+
+            // Tags
+            const tagsContainer = document.getElementById('tagsList');
+            tagsContainer.innerHTML = '';
+            if (movie.tags && movie.tags.length > 0) {
+                movie.tags.forEach(tag => {
+                    tagsContainer.innerHTML += `<span class="tag">${escapeHtml(tag)}</span>`;
+                });
+            }
+
+            // Cache info
+            const cacheContainer = document.getElementById('cacheInfo');
+            const cacheHit = cache && cache.hit;
+            const cacheAge = cache && cache.age ? formatDuration(cache.age) : null;
+            
+            cacheContainer.innerHTML = `
+                <span>⚡</span>
+                <span class="cache-badge ${cacheHit ? 'hit' : ''}">
+                    ${cacheHit ? 'CACHE HIT' : 'CACHE MISS'}
+                </span>
+                ${cacheAge ? `<span>• ${cacheAge} ago</span>` : ''}
+            `;
+        }
+
+        function displayVideoSources(videos) {
+            const container = document.getElementById('sourcesList');
+            container.innerHTML = '';
+
+            videos.forEach((video, index) => {
+                const status = video.status || 'error';
+                const isSuccess = status === 'success';
+                const hasSources = video.videoSources && video.videoSources.length > 0;
+
+                const sourceEl = document.createElement('div');
+                sourceEl.className = `source-item ${status}`;
+                
+                let versionLabel = video.version || 'original';
+                if (video.label) versionLabel = video.label;
+                
+                const subtitleBadge = video.subtitle ? '<span class="source-version subtitle">Chinese Sub</span>' : '';
+                const leakBadge = video.leak ? '<span class="source-version" style="background: rgba(255, 107, 107, 0.2); color: var(--accent-primary);">Leak</span>' : '';
+
+                sourceEl.innerHTML = `
+                    <div class="source-header">
+                        <div class="source-name">
+                            ${escapeHtml(video.siteName)}
+                            <span class="source-version">${versionLabel}</span>
+                            ${subtitleBadge}
+                            ${leakBadge}
+                        </div>
+                        <div class="source-status">
+                            <span class="status-dot ${status}"></span>
+                            ${status}
+                        </div>
+                    </div>
+                    
+                    ${video.error ? `<div style="color: var(--error); font-size: 0.875rem; margin-top: var(--space-xs);">${escapeHtml(video.error)}</div>` : ''}
+                    
+                    ${isSuccess && hasSources ? `
+                        <div class="video-sources-count">
+                            ${video.videoSources.length} source(s) available
+                        </div>
+                        <div class="source-actions">
+                            <button class="btn btn-primary btn-sm" onclick="playVideo(${index}, 0)">
+                                <span>▶️</span> Play
+                            </button>
+                            <button class="btn btn-secondary btn-sm" onclick="copyM3U8Url(${index}, 0)">
+                                <span>📋</span> Copy URL
+                            </button>
+                            ${video.pageUrl ? `
+                                <a href="${video.pageUrl}" target="_blank" class="btn btn-secondary btn-sm" style="text-decoration: none;">
+                                    <span>🔗</span> Open Site
+                                </a>
+                            ` : ''}
+                        </div>
+                    ` : ''}
+                `;
+
+                container.appendChild(sourceEl);
+            });
+        }
+
+        // Video Playback
+        function playVideo(videoIndex, sourceIndex) {
+            if (!searchResults || !searchResults.videos[videoIndex]) return;
+            
+            const video = searchResults.videos[videoIndex];
+            const source = video.videoSources[sourceIndex];
+            
+            if (!source) {
+                showToast('No video source available', 'error');
+                return;
+            }
+
+            const videoEl = document.getElementById('videoPlayer');
+            const placeholder = document.getElementById('videoPlaceholder');
+            
+            placeholder.style.display = 'none';
+            videoEl.style.display = 'block';
+
+            // Destroy previous HLS instance
+            if (currentHls) {
+                currentHls.destroy();
+                currentHls = null;
+            }
+
+            const isM3U8 = source.type === 'application/x-mpegURL' || source.url.includes('.m3u8');
+
+            if (isM3U8 && Hls.isSupported()) {
+                // Use HLS.js with proxy for M3U8
+                const proxyUrl = buildUrl(`/api/v1/m3u8?url=${btoa(source.url)}`);
+                
+                currentHls = new Hls({
+                    enableWorker: true,
+                    lowLatencyMode: false,
+                    maxBufferLength: 30,
+                    maxMaxBufferLength: 60
+                });
+                
+                currentHls.loadSource(proxyUrl);
+                currentHls.attachMedia(videoEl);
+                
+                currentHls.on(Hls.Events.MANIFEST_PARSED, () => {
+                    videoEl.play().catch(err => console.log('Autoplay blocked:', err));
+                    showToast(`Playing from ${video.siteName}`, 'success');
+                });
+                
+                currentHls.on(Hls.Events.ERROR, (event, data) => {
+                    if (data.fatal) {
+                        showToast(`Playback error: ${data.type}`, 'error');
+                    }
+                });
+            } else {
+                // Direct MP4 playback
+                videoEl.src = source.url;
+                videoEl.play().catch(err => console.log('Autoplay blocked:', err));
+                showToast(`Playing from ${video.siteName}`, 'success');
+            }
+        }
+
+        function copyM3U8Url(videoIndex, sourceIndex) {
+            if (!searchResults || !searchResults.videos[videoIndex]) return;
+            
+            const video = searchResults.videos[videoIndex];
+            const source = video.videoSources[sourceIndex];
+            
+            if (!source) {
+                showToast('No URL to copy', 'error');
+                return;
+            }
+
+            const isM3U8 = source.type === 'application/x-mpegURL' || source.url.includes('.m3u8');
+            const urlToCopy = isM3U8 
+                ? buildUrl(`/api/v1/m3u8?url=${btoa(source.url)}`)
+                : source.url;
+
+            navigator.clipboard.writeText(urlToCopy).then(() => {
+                showToast('URL copied to clipboard', 'success');
+            }).catch(() => {
+                showToast('Failed to copy URL', 'error');
+            });
+        }
+
+        // UI Helpers
+        function showLoading(show) {
+            loadingOverlay.classList.toggle('active', show);
+            searchBtn.disabled = show;
+        }
+
+        function showError(message) {
+            errorContainer.innerHTML = `
+                <div class="error-alert">
+                    <span class="error-alert-icon">⚠️</span>
+                    <div class="error-alert-content">
+                        <div class="error-alert-title">Error</div>
+                        <div class="error-alert-message">${escapeHtml(message)}</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function clearError() {
+            errorContainer.innerHTML = '';
+        }
+
+        function showToast(message, type = 'info') {
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.innerHTML = `
+                <span>${type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️'}</span>
+                <span>${escapeHtml(message)}</span>
+            `;
+            
+            toastContainer.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateX(100%)';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        // Utilities
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function formatDate(dateStr) {
+            try {
+                const date = new Date(dateStr);
+                return date.toLocaleDateString('en-US', { 
+                    year: 'numeric', 
+                    month: 'short', 
+                    day: 'numeric' 
+                });
+            } catch {
+                return dateStr;
+            }
+        }
+
+        function formatDuration(ms) {
+            const seconds = Math.floor(ms / 1000);
+            const minutes = Math.floor(seconds / 60);
+            const hours = Math.floor(minutes / 60);
+            const days = Math.floor(hours / 24);
+
+            if (days > 0) return `${days}d`;
+            if (hours > 0) return `${hours}h`;
+            if (minutes > 0) return `${minutes}m`;
+            return `${seconds}s`;
+        }
+    </script>
+</body>
+</html>
