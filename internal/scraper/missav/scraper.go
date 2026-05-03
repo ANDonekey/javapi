@@ -3,6 +3,7 @@
 package missav
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -134,7 +135,12 @@ func (s *MISSAVScraper) Search(ctx context.Context, code string) ([]domain.Video
 		return nil, fmt.Errorf("missav: HTTP %d: %s", resp.StatusCode, string(body))
 	}
 
-	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	bodyBytes, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
+	if err != nil {
+		return nil, fmt.Errorf("missav: read body: %w", err)
+	}
+
+	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(bodyBytes))
 	if err != nil {
 		return nil, fmt.Errorf("missav: parse HTML: %w", err)
 	}
@@ -158,6 +164,17 @@ func (s *MISSAVScraper) Search(ctx context.Context, code string) ([]domain.Video
 	}
 
 	sources := extractVideoSources(doc)
+
+	seen := make(map[string]bool)
+	for _, s := range sources {
+		seen[s.URL] = true
+	}
+	for _, url := range scraper.ExtractM3U8FromRawHTML(string(bodyBytes)) {
+		if !seen[url] {
+			seen[url] = true
+			sources = append(sources, domain.VideoSource{URL: url, Type: "application/x-mpegURL"})
+		}
+	}
 
 	normalizedCode := scraper.NormalizeCode(code)
 	titleOk := verifyTitle(doc, normalizedCode)

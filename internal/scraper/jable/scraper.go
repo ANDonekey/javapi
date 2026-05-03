@@ -22,7 +22,6 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/henry/javapi/internal/domain"
@@ -48,15 +47,7 @@ type Scraper struct {
 
 func init() {
 	s := &Scraper{
-		client: &http.Client{
-			Timeout: 10 * time.Second,
-			CheckRedirect: func(req *http.Request, via []*http.Request) error {
-				if len(via) >= 10 {
-					return fmt.Errorf("too many redirects")
-				}
-				return nil
-			},
-		},
+		client:  scraper.NewCFClient(""),
 		enabled: true,
 	}
 
@@ -80,13 +71,7 @@ func (s *Scraper) GetProxyConfig() domain.ProxyConfig { return s.proxyConfig }
 func (s *Scraper) SetProxyConfig(pc domain.ProxyConfig) {
 	s.proxyConfig = pc
 	if pc.Enabled && pc.URL != "" {
-		proxyURL, err := url.Parse(pc.URL)
-		if err == nil {
-			transport := &http.Transport{
-				Proxy: http.ProxyURL(proxyURL),
-			}
-			s.client.Transport = transport
-		}
+		s.client = scraper.NewCFClient(pc.URL)
 	}
 }
 
@@ -114,7 +99,7 @@ func (s *Scraper) Search(ctx context.Context, code string) ([]domain.VideoResult
 
 	// 1. Search page
 	searchURL := fmt.Sprintf("%s/search/%s/", baseURL, formatted)
-	doc, finalURL, err := s.fetchPage(ctx, searchURL)
+	doc, finalURL, _, err := s.fetchPage(ctx, searchURL)
 	if err != nil {
 		return errorResult(formatted, fmt.Sprintf("search request: %v", err)), nil
 	}
@@ -150,11 +135,11 @@ func (s *Scraper) Search(ctx context.Context, code string) ([]domain.VideoResult
 	}
 
 	// 4. Fetch video page and extract player
-	videoDoc, _, fetchErr := s.fetchPage(ctx, videoURL)
+	videoDoc, _, rawVideoHTML, fetchErr := s.fetchPage(ctx, videoURL)
 	if fetchErr != nil {
 		return errorResult(formatted, fmt.Sprintf("video page: %v", fetchErr)), nil
 	}
-	playerURL, cnsubPlayerURL := extractPlayers(videoDoc)
+	playerURL, cnsubPlayerURL := extractPlayers(videoDoc, rawVideoHTML)
 
 	// 5. Build results — multi-version support
 	var results []domain.VideoResult
@@ -195,13 +180,12 @@ func (s *Scraper) Search(ctx context.Context, code string) ([]domain.VideoResult
 
 // fetchPage performs a GET request with jable-specific headers and returns
 // the parsed HTML document and the final URL after any redirects.
-func (s *Scraper) fetchPage(ctx context.Context, pageURL string) (*goquery.Document, string, error) {
+func (s *Scraper) fetchPage(ctx context.Context, pageURL string) (*goquery.Document, string, string, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", pageURL, nil)
 	if err != nil {
-		return nil, pageURL, err
+		return nil, pageURL, "", err
 	}
 
-	// Custom headers required by jable.tv
 	req.Header.Set("Referer", baseURL+"/")
 	req.Header.Set("Origin", baseURL)
 	req.Header.Set("Accept-Language", "zh-CN,zh;q=0.9")
@@ -210,21 +194,21 @@ func (s *Scraper) fetchPage(ctx context.Context, pageURL string) (*goquery.Docum
 
 	resp, err := s.client.Do(req)
 	if err != nil {
-		return nil, pageURL, err
+		return nil, pageURL, "", err
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
 	if err != nil {
-		return nil, resp.Request.URL.String(), err
+		return nil, resp.Request.URL.String(), "", err
 	}
 
 	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(body))
 	if err != nil {
-		return nil, resp.Request.URL.String(), err
+		return nil, resp.Request.URL.String(), "", err
 	}
 
-	return doc, resp.Request.URL.String(), nil
+	return doc, resp.Request.URL.String(), string(body), nil
 }
 
 // isNotFound checks whether the response indicates no results were found.
@@ -328,7 +312,7 @@ func findCNSubLink(doc *goquery.Document, code string) string {
 
 // extractPlayers scans the video page for player source URLs.
 // Returns (original_player_url, cnsub_player_url).
-func extractPlayers(doc *goquery.Document) (string, string) {
+func extractPlayers(doc *goquery.Document, rawHTML string) (string, string) {
 	var playerURL, cnsubURL string
 
 	// Look for video source elements
@@ -376,7 +360,6 @@ func extractPlayers(doc *goquery.Document) (string, string) {
 	if playerURL == "" {
 		doc.Find("#video-player script, .h-player script, script").EachWithBreak(func(i int, s *goquery.Selection) bool {
 			script := s.Text()
-			// Common pattern: player source embedded in script
 			for _, pattern := range []string{`source:'`, `source: "`, `src: "`, `src:'`} {
 				idx := strings.Index(script, pattern)
 				if idx >= 0 {
@@ -392,6 +375,16 @@ func extractPlayers(doc *goquery.Document) (string, string) {
 			}
 			return playerURL == "" // continue if not found
 		})
+	}
+
+	// Raw HTML fallback: search for M3U8 URLs that DOM selectors missed
+	if playerURL == "" {
+		for _, url := range scraper.ExtractM3U8FromRawHTML(rawHTML) {
+			if isValidPlayerURL(url) {
+				playerURL = url
+				break
+			}
+		}
 	}
 
 	// CNSub detection: .nav-tabs or tab content with "字幕"/"中文" label

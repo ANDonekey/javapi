@@ -1422,18 +1422,29 @@ M3U8: /api/v1/videos/{id}/manifest/master.m3u8?hb=XXXX
 - 多版本检测应在 titleOk 后才执行
 - 所有变体共享同一个 mutable sources slice
 
-### 修改后爬虫清单
+## P2 修复: M3U8 提取增强 (借鉴参考项目 missav)
 
-| 站点 | 状态 |
-|------|------|
-| MISSAV | ✅ 已实现 |
-| Jable | ✅ 已实现 |
-| javgg | ✅ 已实现 |
-| AV01 | 🔧 待修复 |
-| 7mmtv | ✅ 已实现 |
-| ~~hayav~~ | ❌ 移除 (CF不可绕过) |
-| ~~javmenu~~ | ❌ 移除 (内容欠佳) |
-| ~~supjav~~ | ❌ 排除 (CF不可绕过) |
+### 问题
+参考项目 `/home/henry/code/missav` 能成功提取 MISSAV/Jable 的 M3U8 URL，但 JAVprovide 不能。
+JAVprovide 用 DOM 选择器 (goquery)，参考项目用**原始 HTML 正则搜索**。
 
-**有效爬虫**: 5 个 (MISSAV, Jable, javgg, AV01修复后, 7mmtv)
+### 修复 1: 通用 M3U8 正则提取 (中)
+
+在 Jable 和 MISSAV 中添加 `extractM3U8FromRawHTML(html string) []string`:
+```go
+func extractM3U8FromRawHTML(html string) []string {
+    re := regexp.MustCompile(`https?://[^'"\\\s<>]+\.m3u8[^'"\\\s<>]*`)
+    return re.FindAllString(html, -1)
+}
+```
+- 扫描整个原始 HTML body（不限 DOM 元素）
+- 找到所有 `.m3u8` URL（包括藏在 script/data-* 中的）
+- 附加到现有 DOM 提取结果之后
+
+### 修复 2: Jable 用 CF 客户端 (小)
+
+Jable 使用纯 `net/http`（无 CF 绕过）。
+替换为 `scraper.NewCFClient(proxyURL)`（与 MISSAV 相同）:
+- init() 中创建 CF 客户端
+- SetProxyConfig 中重建 CF 客户端
 
