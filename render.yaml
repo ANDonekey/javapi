@@ -14,13 +14,9 @@ services:
         sync: false
       - key: SCRAPER_MISSAV_PROXY_URL
         sync: false
-      - key: SCRAPER_HAYAV_PROXY_URL
-        sync: false
       - key: SCRAPER_7MMTV_PROXY_URL
         sync: false
       - key: SCRAPER_JABLE_PROXY_URL
-        sync: false
-      - key: SCRAPER_JAVMENU_PROXY_URL
         sync: false
       - key: SCRAPER_JAVGG_PROXY_URL
         sync: false

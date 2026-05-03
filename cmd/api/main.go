@@ -23,10 +23,8 @@ import (
 
 	// Register all scrapers via init()
 	_ "github.com/henry/javapi/internal/scraper/av01"
-	_ "github.com/henry/javapi/internal/scraper/hayav"
 	_ "github.com/henry/javapi/internal/scraper/jable"
 	_ "github.com/henry/javapi/internal/scraper/javgg"
-	_ "github.com/henry/javapi/internal/scraper/javmenu"
 	_ "github.com/henry/javapi/internal/scraper/missav"
 	_ "github.com/henry/javapi/internal/scraper/sevenmmtv"
 )

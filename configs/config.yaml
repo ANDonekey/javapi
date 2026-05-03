@@ -40,14 +40,6 @@ scrapers:
       enabled: true
       proxy_enabled: false
       timeout_sec: 10
-    - name: "javmenu"
-      enabled: true
-      proxy_enabled: false
-      timeout_sec: 10
-    - name: "hayav"
-      enabled: true
-      proxy_enabled: false
-      timeout_sec: 10
     - name: "javgg"
       enabled: true
       proxy_enabled: false

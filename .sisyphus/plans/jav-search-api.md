@@ -1368,15 +1368,71 @@ curl -s -H "X-API-Key: test-key" "http://localhost:8080/api/v1/search?code=ABC-1
 
 | Priority | Improvement | Effort | Impact |
 |----------|-------------|--------|--------|
-| 🔴 P0 | **验证 hayav/7mmtv 代理是否生效** | 测试 | 目前 2/7 blocked |
-| 🟡 P1 | **MISSAV 启动超时问题** — init 时 CF 测试卡住 30s | 中 | 减少冷启动时间 |
-| 🟡 P1 | **AV01 error 修复** | 中 | 7→8 爬虫可用 |
-| 🟡 P1 | **javmenu not_found 修复** | 小 | 可能是 URL 格式问题 |
-| 🟢 P2 | **缓存 TTL 可配置化** | 小 | 灵活控制 |
-| 🟢 P2 | **健康检查中显示爬虫状态** | 小 | /api/health 返回 {scrapers: {missav: "ok", ...}} |
-| 🟢 P2 | **搜索结果排序** — 有源优先 | 小 | 用户体验 |
-| 🔵 P3 | **Swagger/OpenAPI 文档** | 中 | 第三方集成 |
-| 🔵 P3 | **Ja3 指纹配置** — 针对不同站点 | 大 | 提高 CF 绕过率 |
-| 🔵 P3 | **M3U8 代理** — 视频流代理 | 中 | 突破地域限制 |
-| 🔵 P3 | **更多爬虫** — 补充被排除的站点 | 大 | 扩展覆盖
+| ~~🔴 P0~~ | ~~验证 hayav/7mmtv 代理~~ | ✅ Done | 代理生效但数据中心IP仍被CF拦 |
+| 🟡 P1 | **hayav 标记不支持** (CF不可绕过) | 小 | 清理代码 |
+| 🟡 P1 | **javmenu 标记不支持** (内容欠佳) | 小 | 清理代码 |
+| 🟡 P1 | **AV01 修复** — 搜索端点 + M3U8提取 | 中 | 7→5→6 爬虫可用 |
+| 🟡 P1 | **Jable URL 格式修复** — pageUrl 含搜索URL | 小 | 用户体验 |
+| 🟢 P2 | **缓存 TTL 可配置化** | 小 | — |
+| 🟢 P2 | **健康检查中显示爬虫状态** | 小 | — |
+| 🔵 P3 | **Ja3 指纹 + 住宅代理** 突破CF | 大 | — |
+| 🔵 P3 | **更多爬虫站点** | 大 | — |
+
+---
+
+## P1 修复计划: 爬虫清理 + AV01/Jable 修复
+
+### 1. 标记不支持站点 (小)
+
+| 站点 | 原因 | 操作 |
+|------|------|------|
+| **hayav** | CF 无法绕过 (数据中心代理也被拦) | 移除 hayav 爬虫目录，从 main.go 移除 import |
+| **javmenu** | 内容欠佳 (视频质量/可用性不足) | 移除 javmenu 爬虫目录，从 main.go 移除 import |
+| **supjav** | CF 无法绕过 (之前已标记) | 已排除，确认无残留 |
+
+### 2. AV01 修复 (中)
+
+**当前问题**：
+- 搜索端点错误: `POST /api/v1/videos/search?lang=ja` (JSON API，已失效)
+- 未提取视频源: 只返回 pageUrl，无 VideoSources
+
+**正确流程**：
+```
+1. 搜索: POST https://www.av01.media/cn/search?q=MIDA-492
+2. 解析 HTML 搜索结果 → 提取视频 ID (203184)
+3. 构建视频页 URL: https://www.av01.media/cn/video/203184/mida-492
+4. 获取视频页 → 提取 M3U8: /api/v1/videos/203184/manifest/master.m3u8?hb=XXXX
+```
+
+**修改内容**：
+- `searchPath`: `/api/v1/videos/search?lang=ja` → `/cn/search`
+- 搜索方式: `POST JSON` → `POST form-urlencoded` (q=MIDA-492)
+- 解析方式: `json.Unmarshal` → `goquery` HTML 解析
+- 页面URL模板: `/jp/video/%s/%s` → `/cn/video/%s/%s` (code 小写)
+- **新增**: 获取视频页提取 M3U8 (fetchPage → extractM3U8)
+- M3U8 URL 模式: `/api/v1/videos/{id}/manifest/master.m3u8`
+
+### 3. Jable URL 修复 (小)
+
+**当前状态**: Jable 能成功返回视频源 (已验证 MIDA-492 → success, 1 source)
+**问题**: `not_found` 和 `error` 响应中 `pageUrl` 显示搜索 URL 而非视频页 URL
+
+**修改**: 
+- `errorResult` / `notFoundResult` 中 pageUrl 字段保持原样 (设计如此 — 失败时返回搜索URL让调用者知道搜索位置)
+- **无需修改** — 这是合理设计
+
+### 修改后爬虫清单
+
+| 站点 | 状态 |
+|------|------|
+| MISSAV | ✅ 已实现 |
+| Jable | ✅ 已实现 |
+| javgg | ✅ 已实现 |
+| AV01 | 🔧 待修复 |
+| 7mmtv | ✅ 已实现 |
+| ~~hayav~~ | ❌ 移除 (CF不可绕过) |
+| ~~javmenu~~ | ❌ 移除 (内容欠佳) |
+| ~~supjav~~ | ❌ 排除 (CF不可绕过) |
+
+**有效爬虫**: 5 个 (MISSAV, Jable, javgg, AV01修复后, 7mmtv)
 

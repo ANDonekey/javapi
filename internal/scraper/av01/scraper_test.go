@@ -2,10 +2,10 @@ package av01
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/henry/javapi/internal/domain"
@@ -95,31 +95,38 @@ func TestInitRegistration(t *testing.T) {
 	assert.True(t, found, "av01 scraper should be registered via init()")
 }
 
-func TestSearch_SuccessByDVDID(t *testing.T) {
+func TestSearch_Success(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, http.MethodPost, r.Method)
-		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
-		assert.Equal(t, "application/json", r.Header.Get("Accept"))
-		assert.Equal(t, userAgent, r.Header.Get("User-Agent"))
+		path := r.URL.Path
 
-		var body searchRequest
-		assert.NoError(t, json.NewDecoder(r.Body).Decode(&body))
-		assert.Equal(t, "ABC-123", body.Query)
-		assert.Equal(t, 1, body.Pagination.Page)
-		assert.Equal(t, 24, body.Pagination.Limit)
+		if path == "/cn/search" {
+			assert.Equal(t, http.MethodPost, r.Method)
+			assert.Equal(t, "application/x-www-form-urlencoded", r.Header.Get("Content-Type"))
+			bodyBytes, _ := io.ReadAll(r.Body)
+			assert.Contains(t, string(bodyBytes), "q=MIDA-492")
 
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(searchResponse{
-			Videos: []videoEntry{
-				{ID: "vid001", DVDID: "ABC-123", DMMID: "dmm001"},
-			},
-		})
+			w.Header().Set("Content-Type", "text/html")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`<html><body>
+				<a href="/cn/video/203184/mida-492">MIDA-492</a>
+			</body></html>`))
+			return
+		}
+
+		if strings.HasPrefix(path, "/cn/video/") {
+			assert.Equal(t, http.MethodGet, r.Method)
+			w.Header().Set("Content-Type", "text/html")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`<html><script>var src="/api/v1/videos/203184/manifest/master.m3u8";</script></html>`))
+			return
+		}
+
+		w.WriteHeader(http.StatusNotFound)
 	}))
 	defer srv.Close()
 
 	s := newTestScraper(srv)
-	results, err := s.Search(context.Background(), "ABC-123")
+	results, err := s.Search(context.Background(), "MIDA-492")
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 
@@ -127,62 +134,74 @@ func TestSearch_SuccessByDVDID(t *testing.T) {
 	assert.Equal(t, "av01", r.SiteName)
 	assert.Equal(t, domain.StatusSuccess, r.Status)
 	assert.Equal(t, domain.VersionOriginal, r.Version)
-	assert.Equal(t, srv.URL+"/jp/video/vid001/ABC-123", r.PageURL)
+	assert.Equal(t, srv.URL+"/cn/video/203184/mida-492", r.PageURL)
+	assert.Len(t, r.VideoSources, 1)
+	assert.Equal(t, "application/x-mpegURL", r.VideoSources[0].Type)
+	assert.Contains(t, r.VideoSources[0].URL, "master.m3u8")
 	assert.Empty(t, r.Error)
 }
 
-func TestSearch_SuccessByDMMID(t *testing.T) {
+func TestSearch_SuccessWithM3U8InSourceTag(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(searchResponse{
-			Videos: []videoEntry{
-				{ID: "x777", DVDID: "XYZ-999", DMMID: "ABC-123"},
-			},
-		})
+		if r.URL.Path == "/cn/search" {
+			w.Header().Set("Content-Type", "text/html")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`<html><a href="/cn/video/42/test-001">TEST-001</a></html>`))
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, "/cn/video/") {
+			w.Header().Set("Content-Type", "text/html")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`<video><source src="/api/v1/videos/42/manifest/master.m3u8" type="application/x-mpegURL"></video>`))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
 	}))
 	defer srv.Close()
 
 	s := newTestScraper(srv)
-	results, err := s.Search(context.Background(), "ABC-123")
+	results, err := s.Search(context.Background(), "TEST-001")
 	require.NoError(t, err)
 	require.Len(t, results, 1)
-
 	assert.Equal(t, domain.StatusSuccess, results[0].Status)
-	assert.Equal(t, srv.URL+"/jp/video/x777/ABC-123", results[0].PageURL)
+	assert.Len(t, results[0].VideoSources, 1)
+	assert.Contains(t, results[0].VideoSources[0].URL, "master.m3u8")
 }
 
-func TestSearch_SuccessNormalizedMatch(t *testing.T) {
+func TestSearch_SuccessWithNormalizedMatch(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(searchResponse{
-			Videos: []videoEntry{
-				{ID: "n001", DVDID: "abc_123"},
-			},
-		})
+		if r.URL.Path == "/cn/search" {
+			w.Header().Set("Content-Type", "text/html")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`<html><a href="/cn/video/77/abc-123">ABC 123</a></html>`))
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, "/cn/video/") {
+			w.Header().Set("Content-Type", "text/html")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`<html><script>var u="/api/v1/videos/77/manifest/master.m3u8";</script></html>`))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
 	}))
 	defer srv.Close()
 
 	s := newTestScraper(srv)
-
 	results, err := s.Search(context.Background(), "ABC-123")
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	assert.Equal(t, domain.StatusSuccess, results[0].Status)
-	assert.Equal(t, srv.URL+"/jp/video/n001/ABC-123", results[0].PageURL)
 }
 
 func TestSearch_NoMatch(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
+		assert.Equal(t, "/cn/search", r.URL.Path)
+		w.Header().Set("Content-Type", "text/html")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(searchResponse{
-			Videos: []videoEntry{
-				{ID: "a", DVDID: "OTHER-001"},
-				{ID: "b", DVDID: "OTHER-002"},
-			},
-		})
+		w.Write([]byte(`<html><body>
+			<a href="/cn/video/1/other-001">OTHER-001</a>
+			<a href="/cn/video/2/other-002">OTHER-002</a>
+		</body></html>`))
 	}))
 	defer srv.Close()
 
@@ -190,16 +209,15 @@ func TestSearch_NoMatch(t *testing.T) {
 	results, err := s.Search(context.Background(), "ABC-123")
 	require.NoError(t, err)
 	require.Len(t, results, 1)
-
 	assert.Equal(t, domain.StatusNotFound, results[0].Status)
 	assert.Equal(t, "av01", results[0].SiteName)
 }
 
-func TestSearch_EmptyVideos(t *testing.T) {
+func TestSearch_EmptySearchResults(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Type", "text/html")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(searchResponse{})
+		w.Write([]byte(`<html><body><p>No results found</p></body></html>`))
 	}))
 	defer srv.Close()
 
@@ -220,7 +238,6 @@ func TestSearch_HTTPError(t *testing.T) {
 	results, err := s.Search(context.Background(), "ABC-123")
 	require.NoError(t, err)
 	require.Len(t, results, 1)
-
 	assert.Equal(t, domain.StatusError, results[0].Status)
 	assert.Contains(t, results[0].Error, "HTTP 500")
 }
@@ -235,48 +252,43 @@ func TestSearch_HTTPNotFound(t *testing.T) {
 	results, err := s.Search(context.Background(), "ABC-123")
 	require.NoError(t, err)
 	require.Len(t, results, 1)
-
 	assert.Equal(t, domain.StatusError, results[0].Status)
 	assert.Contains(t, results[0].Error, "HTTP 404")
 }
 
-func TestSearch_InvalidJSON(t *testing.T) {
+func TestSearch_FallbackToConstructedM3U8(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("this is not valid json"))
+		if r.URL.Path == "/cn/search" {
+			w.Header().Set("Content-Type", "text/html")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`<html><a href="/cn/video/999/fall-001">FALL-001</a></html>`))
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, "/cn/video/") {
+			w.Header().Set("Content-Type", "text/html")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`<html><body><p>No video player here</p></body></html>`))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
 	}))
 	defer srv.Close()
 
 	s := newTestScraper(srv)
-	results, err := s.Search(context.Background(), "ABC-123")
+	results, err := s.Search(context.Background(), "FALL-001")
 	require.NoError(t, err)
 	require.Len(t, results, 1)
-
-	assert.Equal(t, domain.StatusError, results[0].Status)
-	assert.Contains(t, results[0].Error, "invalid response JSON")
-}
-
-func TestSearch_EmptyJSON(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("{}"))
-	}))
-	defer srv.Close()
-
-	s := newTestScraper(srv)
-	results, err := s.Search(context.Background(), "ABC-123")
-	require.NoError(t, err)
-	require.Len(t, results, 1)
-	assert.Equal(t, domain.StatusNotFound, results[0].Status)
+	assert.Equal(t, domain.StatusSuccess, results[0].Status)
+	assert.Len(t, results[0].VideoSources, 1)
+	assert.Equal(t, "application/x-mpegURL", results[0].VideoSources[0].Type)
+	assert.Contains(t, results[0].VideoSources[0].URL, "/api/v1/videos/999/manifest/master.m3u8")
 }
 
 func TestSearch_ContextCancelled(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Type", "text/html")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(searchResponse{})
+		w.Write([]byte(`<html></html>`))
 	}))
 	defer srv.Close()
 
@@ -303,78 +315,86 @@ func TestSearch_DisabledScraper(t *testing.T) {
 	assert.Contains(t, err.Error(), "scraper is disabled")
 }
 
-func TestSearch_MultipleVideosMatchFirst(t *testing.T) {
+func TestSearch_MatchesByCodeInHref(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(searchResponse{
-			Videos: []videoEntry{
-				{ID: "first", DVDID: "OTHER-001"},
-				{ID: "target", DVDID: "ABC-123"},
-				{ID: "third", DVDID: "OTHER-002"},
-			},
-		})
+		if r.URL.Path == "/cn/search" {
+			w.Header().Set("Content-Type", "text/html")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`<html><a href="/cn/video/555/my-code-001">Some Title</a></html>`))
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, "/cn/video/") {
+			w.Header().Set("Content-Type", "text/html")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`<script>"/api/v1/videos/555/manifest/master.m3u8"</script>`))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
 	}))
 	defer srv.Close()
 
 	s := newTestScraper(srv)
-	results, err := s.Search(context.Background(), "ABC-123")
+	results, err := s.Search(context.Background(), "MY-CODE-001")
 	require.NoError(t, err)
 	require.Len(t, results, 1)
-
 	assert.Equal(t, domain.StatusSuccess, results[0].Status)
-	assert.Equal(t, srv.URL+"/jp/video/target/ABC-123", results[0].PageURL)
+	assert.Equal(t, srv.URL+"/cn/video/555/my-code-001", results[0].PageURL)
 }
 
-func TestSearch_MatchPrefersFirstResult(t *testing.T) {
+func TestSearch_MatchesFirstResultOnly(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(searchResponse{
-			Videos: []videoEntry{
-				{ID: "a1", DVDID: "ABC-123", DMMID: "dmm-a"},
-				{ID: "b2", DVDID: "OTHER", DMMID: "ABC-123"},
-			},
-		})
+		if r.URL.Path == "/cn/search" {
+			w.Header().Set("Content-Type", "text/html")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`<html>
+				<a href="/cn/video/1/dup-001">DUP-001</a>
+				<a href="/cn/video/2/dup-001">DUP-001</a>
+			</html>`))
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, "/cn/video/") {
+			w.Header().Set("Content-Type", "text/html")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`/api/v1/videos/1/manifest/master.m3u8`))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
 	}))
 	defer srv.Close()
 
 	s := newTestScraper(srv)
-	results, err := s.Search(context.Background(), "ABC-123")
+	results, err := s.Search(context.Background(), "DUP-001")
 	require.NoError(t, err)
 	require.Len(t, results, 1)
-
-	assert.Equal(t, srv.URL+"/jp/video/a1/ABC-123", results[0].PageURL)
+	assert.Equal(t, srv.URL+"/cn/video/1/dup-001", results[0].PageURL)
 }
 
-func TestSearch_PageURLInResult(t *testing.T) {
+func TestSearch_VideoPageErrorUsesFallback(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(searchResponse{
-			Videos: []videoEntry{
-				{ID: "pg001", DVDID: "PAGE-001"},
-			},
-		})
+		if r.URL.Path == "/cn/search" {
+			w.Header().Set("Content-Type", "text/html")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`<html><a href="/cn/video/88/vperr-001">VPERR-001</a></html>`))
+			return
+		}
+		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer srv.Close()
 
 	s := newTestScraper(srv)
-	results, err := s.Search(context.Background(), "PAGE-001")
+	results, err := s.Search(context.Background(), "VPERR-001")
 	require.NoError(t, err)
 	require.Len(t, results, 1)
-	assert.Equal(t, srv.URL+"/jp/video/pg001/PAGE-001", results[0].PageURL)
+	assert.Equal(t, domain.StatusSuccess, results[0].Status)
+	assert.Len(t, results[0].VideoSources, 1)
+	assert.Contains(t, results[0].VideoSources[0].URL, "/api/v1/videos/88/manifest/master.m3u8")
 }
 
-func TestSearch_EmptyDVDDAndDMMID(t *testing.T) {
+func TestSearch_NoVideoLinksInSearch(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Type", "text/html")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(searchResponse{
-			Videos: []videoEntry{
-				{ID: "empty", DVDID: "", DMMID: ""},
-			},
-		})
+		w.Write([]byte(`<html><body><a href="/other/page">Other</a></body></html>`))
 	}))
 	defer srv.Close()
 
@@ -383,95 +403,23 @@ func TestSearch_EmptyDVDDAndDMMID(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	assert.Equal(t, domain.StatusNotFound, results[0].Status)
-}
-
-func TestSearch_NotFoundHasCorrectSiteName(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(searchResponse{})
-	}))
-	defer srv.Close()
-
-	s := newTestScraper(srv)
-	results, err := s.Search(context.Background(), "NONEXIST")
-	require.NoError(t, err)
-	require.Len(t, results, 1)
-	assert.Equal(t, "av01", results[0].SiteName)
-	assert.Equal(t, domain.StatusNotFound, results[0].Status)
-}
-
-func TestSearch_NormalizedMatchAcrossSeparators(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(searchResponse{
-			Videos: []videoEntry{
-				{ID: "ns1", DVDID: "ABC 123"},
-			},
-		})
-	}))
-	defer srv.Close()
-
-	s := newTestScraper(srv)
-
-	t.Run("hyphen_input", func(t *testing.T) {
-		results, err := s.Search(context.Background(), "ABC-123")
-		require.NoError(t, err)
-		require.Len(t, results, 1)
-		assert.Equal(t, domain.StatusSuccess, results[0].Status)
-	})
-
-	t.Run("underscore_input", func(t *testing.T) {
-		results, err := s.Search(context.Background(), "ABC_123")
-		require.NoError(t, err)
-		require.Len(t, results, 1)
-		assert.Equal(t, domain.StatusSuccess, results[0].Status)
-	})
-
-	t.Run("space_input", func(t *testing.T) {
-		results, err := s.Search(context.Background(), "ABC 123")
-		require.NoError(t, err)
-		require.Len(t, results, 1)
-		assert.Equal(t, domain.StatusSuccess, results[0].Status)
-	})
-
-	t.Run("no_separator_input", func(t *testing.T) {
-		results, err := s.Search(context.Background(), "abc123")
-		require.NoError(t, err)
-		require.Len(t, results, 1)
-		assert.Equal(t, domain.StatusSuccess, results[0].Status)
-	})
-}
-
-func TestSearch_SuccessHasNoVideoSources(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(searchResponse{
-			Videos: []videoEntry{
-				{ID: "ns1", DVDID: "ABC-123"},
-			},
-		})
-	}))
-	defer srv.Close()
-
-	s := newTestScraper(srv)
-	results, err := s.Search(context.Background(), "ABC-123")
-	require.NoError(t, err)
-	require.Len(t, results, 1)
-	assert.Nil(t, results[0].VideoSources, "AV01 scraper returns page URL only, no embed sources")
 }
 
 func TestNewWithClient(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(searchResponse{
-			Videos: []videoEntry{
-				{ID: "id", DVDID: "CODE-001"},
-			},
-		})
+		if r.URL.Path == "/cn/search" {
+			w.Header().Set("Content-Type", "text/html")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`<html><a href="/cn/video/1/code-001">CODE-001</a></html>`))
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, "/cn/video/") {
+			w.Header().Set("Content-Type", "text/html")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`/api/v1/videos/1/manifest/master.m3u8`))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
 	}))
 	defer srv.Close()
 
@@ -487,49 +435,82 @@ func TestNewWithClient(t *testing.T) {
 	assert.Contains(t, results[0].PageURL, srv.URL)
 }
 
-func helperJSONResponse(videos []videoEntry) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(searchResponse{Videos: videos})
-	}
+func TestSearch_MatchesCodeInLinkText(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/cn/search" {
+			w.Header().Set("Content-Type", "text/html")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`<html><a href="/cn/video/42/generic-slug">TEXT-001 - Some Movie Title</a></html>`))
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, "/cn/video/") {
+			w.Header().Set("Content-Type", "text/html")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`/api/v1/videos/42/manifest/master.m3u8`))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	s := newTestScraper(srv)
+	results, err := s.Search(context.Background(), "TEXT-001")
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.Equal(t, domain.StatusSuccess, results[0].Status)
+	assert.Equal(t, srv.URL+"/cn/video/42/text-001", results[0].PageURL)
 }
 
-func TestSearch_BenchmarkScenarios(t *testing.T) {
-	generateVideos := func(n int, withMatch bool) []videoEntry {
-		vids := make([]videoEntry, n)
-		for i := 0; i < n; i++ {
-			vids[i] = videoEntry{
-				ID:    fmt.Sprintf("id%d", i),
-				DVDID: fmt.Sprintf("OTHER-%03d", i),
-			}
+func TestSearch_DeduplicatesM3U8Sources(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/cn/search" {
+			w.Header().Set("Content-Type", "text/html")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`<html><a href="/cn/video/10/dedup-001">DEDUP-001</a></html>`))
+			return
 		}
-		if withMatch {
-			vids[n/2] = videoEntry{ID: "match", DVDID: "TARGET-001"}
+		if strings.HasPrefix(r.URL.Path, "/cn/video/") {
+			w.Header().Set("Content-Type", "text/html")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`
+				<script>/api/v1/videos/10/manifest/master.m3u8</script>
+				<script>/api/v1/videos/10/manifest/master.m3u8</script>
+				<script>/api/v1/videos/10/manifest/master.m3u8</script>
+			`))
+			return
 		}
-		return vids
-	}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
 
-	t.Run("large_response_no_match", func(t *testing.T) {
-		srv := httptest.NewServer(helperJSONResponse(generateVideos(100, false)))
-		defer srv.Close()
+	s := newTestScraper(srv)
+	results, err := s.Search(context.Background(), "DEDUP-001")
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.Len(t, results[0].VideoSources, 1)
+}
 
-		s := newTestScraper(srv)
-		results, err := s.Search(context.Background(), "TARGET-001")
-		require.NoError(t, err)
-		require.Len(t, results, 1)
-		assert.Equal(t, domain.StatusNotFound, results[0].Status)
-	})
+func TestSearch_MatchesByNormalizedCodeInHref(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/cn/search" {
+			w.Header().Set("Content-Type", "text/html")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`<html><a href="/cn/video/33/abc_123">Click Here</a></html>`))
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, "/cn/video/") {
+			w.Header().Set("Content-Type", "text/html")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`/api/v1/videos/33/manifest/master.m3u8`))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
 
-	t.Run("large_response_middle_match", func(t *testing.T) {
-		srv := httptest.NewServer(helperJSONResponse(generateVideos(100, true)))
-		defer srv.Close()
-
-		s := newTestScraper(srv)
-		results, err := s.Search(context.Background(), "TARGET-001")
-		require.NoError(t, err)
-		require.Len(t, results, 1)
-		assert.Equal(t, domain.StatusSuccess, results[0].Status)
-		assert.Equal(t, srv.URL+"/jp/video/match/TARGET-001", results[0].PageURL)
-	})
+	s := newTestScraper(srv)
+	results, err := s.Search(context.Background(), "ABC-123")
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.Equal(t, domain.StatusSuccess, results[0].Status)
 }
