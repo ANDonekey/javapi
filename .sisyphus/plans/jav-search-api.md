@@ -1392,34 +1392,35 @@ curl -s -H "X-API-Key: test-key" "http://localhost:8080/api/v1/search?code=ABC-1
 
 ### 2. AV01 修复 (中)
 
-**当前问题**：
-- 搜索端点错误: `POST /api/v1/videos/search?lang=ja` (JSON API，已失效)
-- 未提取视频源: 只返回 pageUrl，无 VideoSources
+**当前问题**：搜索端点错误 + M3U8 提取逻辑错
 
-**正确流程**：
+**正确 API**（用户发现）：
 ```
-1. 搜索: POST https://www.av01.media/cn/search?q=MIDA-492
-2. 解析 HTML 搜索结果 → 提取视频 ID (203184)
-3. 构建视频页 URL: https://www.av01.media/cn/video/203184/mida-492
-4. 获取视频页 → 提取 M3U8: /api/v1/videos/203184/manifest/master.m3u8?hb=XXXX
+POST https://www.av01.media/api/v1/videos/search?lang=cn&comp=true
+Body: {"pagination":{"limit":20,"page":1},"query":"MIDA-492"}
+Response: {"videos":[{"id":203184,"dvd_id":"MIDA-492","dmm_id":"mida00492"}]}
+M3U8: /api/v1/videos/{id}/manifest/master.m3u8?hb=XXXX
 ```
 
-**修改内容**：
-- `searchPath`: `/api/v1/videos/search?lang=ja` → `/cn/search`
-- 搜索方式: `POST JSON` → `POST form-urlencoded` (q=MIDA-492)
-- 解析方式: `json.Unmarshal` → `goquery` HTML 解析
-- 页面URL模板: `/jp/video/%s/%s` → `/cn/video/%s/%s` (code 小写)
-- **新增**: 获取视频页提取 M3U8 (fetchPage → extractM3U8)
-- M3U8 URL 模式: `/api/v1/videos/{id}/manifest/master.m3u8`
+**修改**：恢复 JSON API（原版类似但参数不同 lang=ja→cn, 加comp=true）
 
 ### 3. Jable URL 修复 (小)
 
-**当前状态**: Jable 能成功返回视频源 (已验证 MIDA-492 → success, 1 source)
-**问题**: `not_found` 和 `error` 响应中 `pageUrl` 显示搜索 URL 而非视频页 URL
+**Bug 位置**：`jable/scraper.go:153` — `extractPlayers(doc)` 在搜索页文档上调用
+- 搜索页有 `data-src` 或 `<script>` 含模板 URL `%QUERY%`
+- `extractPlayers` 误提取为视频源 → 跳过视频页抓取
+- **修复**：移除搜索页上的 `extractPlayers`，始终抓取视频页
 
-**修改**: 
-- `errorResult` / `notFoundResult` 中 pageUrl 字段保持原样 (设计如此 — 失败时返回搜索URL让调用者知道搜索位置)
-- **无需修改** — 这是合理设计
+### 4. MISSAV 垃圾内容修复 (中)
+
+**Bug 1 — 垃圾内容**（行 141-157）：
+- 缺少中文反爬检测 "大量垃圾内容"
+- Title 不匹配时应直接返回 NotFound
+
+**Bug 2 — 重复结果**（行 167-205）：
+- `hasSub`/`hasLeak` 在垃圾页上误判
+- 多版本检测应在 titleOk 后才执行
+- 所有变体共享同一个 mutable sources slice
 
 ### 修改后爬虫清单
 

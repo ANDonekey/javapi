@@ -1,42 +1,52 @@
 // Package av01 implements a domain.Scraper for https://www.av01.media.
 //
 // Search flow:
-//  1. POST https://www.av01.media/cn/search?q=CODE (form-urlencoded body: q=CODE)
-//  2. Parse HTML results with goquery → extract video ID from result links
-//  3. Build video page URL: https://www.av01.media/cn/video/{id}/{code_lower}
-//  4. Fetch video page → extract M3U8 URL from page source
-//  5. Fall back to constructed URL: /api/v1/videos/{id}/manifest/master.m3u8
+//  1. POST /api/v1/videos/search?lang=cn&comp=true with JSON body
+//     {"pagination":{"limit":20,"page":1},"query":"CODE"}
+//  2. Parse JSON response → match by dvd_id or dmm_id (normalized)
+//  3. Build M3U8 URL: /api/v1/videos/{id}/manifest/master.m3u8
 package av01
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
-	"regexp"
 	"strings"
 	"time"
 
-	"github.com/PuerkitoBio/goquery"
 	"github.com/henry/javapi/internal/domain"
 	"github.com/henry/javapi/internal/scraper"
 )
 
 const (
-	siteName      = "av01"
-	baseURL       = "https://www.av01.media"
-	searchPath    = "/cn/search"
-	videoPathTmpl = "/cn/video/%s/%s"
-	userAgent     = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-	cfTestURL     = "https://www.av01.media/"
+	siteName  = "av01"
+	baseURL   = "https://www.av01.media"
+	userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+	cfTestURL = "https://www.av01.media/"
 )
 
-var (
-	m3u8Pattern    = regexp.MustCompile(`/api/v1/videos/\d+/manifest/[^"'\s]+\.m3u8`)
-	videoIDPattern = regexp.MustCompile(`/cn/video/(\d+)/`)
-)
+// searchRequest is the JSON body for the search API.
+type searchRequest struct {
+	Pagination searchPagination `json:"pagination"`
+	Query      string           `json:"query"`
+}
+
+type searchPagination struct {
+	Limit int `json:"limit"`
+	Page  int `json:"page"`
+}
+
+// searchVideo mirrors a single video entry in the API response.
+type searchVideo struct {
+	ID    int    `json:"id"`
+	DvdID string `json:"dvd_id"`
+	DmmID string `json:"dmm_id"`
+}
 
 // Scraper implements domain.Scraper for av01.media.
 type Scraper struct {
@@ -111,13 +121,12 @@ func (s *Scraper) SetProxyConfig(pc domain.ProxyConfig) {
 	}
 }
 
-// Search performs an HTML-based search on AV01 and returns video results.
+// Search performs a JSON API search on AV01 and returns video results.
 //
 // Flow:
-//  1. POST form-urlencoded search to /cn/search?q=CODE
-//  2. Parse HTML with goquery to find matching video IDs
-//  3. Fetch the video page and extract M3U8 sources
-//  4. Fall back to a constructed M3U8 URL if extraction yields nothing
+//  1. POST JSON to /api/v1/videos/search?lang=cn&comp=true
+//  2. Parse JSON response → match by normalized dvd_id or dmm_id
+//  3. Construct M3U8 URL from matched video ID
 func (s *Scraper) Search(ctx context.Context, code string) ([]domain.VideoResult, error) {
 	if !s.enabled {
 		return nil, fmt.Errorf("av01: scraper is disabled")
@@ -149,16 +158,24 @@ func (s *Scraper) Search(ctx context.Context, code string) ([]domain.VideoResult
 		return nil, fmt.Errorf("av01: scraper is disabled")
 	}
 
-	searchURL := s.baseURL + searchPath + "?q=" + url.QueryEscape(code)
+	searchURL := s.baseURL + "/api/v1/videos/search?lang=cn&comp=true"
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, searchURL,
-		strings.NewReader("q="+url.QueryEscape(code)))
+	body := searchRequest{
+		Pagination: searchPagination{Limit: 20, Page: 1},
+		Query:      code,
+	}
+	bodyBytes, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("av01: marshal request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, searchURL, bytes.NewReader(bodyBytes))
 	if err != nil {
 		return nil, fmt.Errorf("av01: create request: %w", err)
 	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", userAgent)
-	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+	req.Header.Set("Accept", "application/json")
 
 	resp, err := s.client.Do(req)
 	if err != nil {
@@ -182,33 +199,33 @@ func (s *Scraper) Search(ctx context.Context, code string) ([]domain.VideoResult
 		}}, nil
 	}
 
-	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	respBytes, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
-		return nil, fmt.Errorf("av01: parse search HTML: %w", err)
+		return nil, fmt.Errorf("av01: read response: %w", err)
+	}
+
+	var sr struct {
+		Videos []searchVideo `json:"videos"`
+	}
+	if err := json.Unmarshal(respBytes, &sr); err != nil {
+		return nil, fmt.Errorf("av01: parse JSON: %w", err)
 	}
 
 	normalized := scraper.NormalizeCode(code)
-	var videoID string
+	var matchedID int
 
-	doc.Find("a[href]").Each(func(_ int, sel *goquery.Selection) {
-		if videoID != "" {
-			return
+	for _, v := range sr.Videos {
+		if v.DvdID != "" && scraper.NormalizeCode(v.DvdID) == normalized {
+			matchedID = v.ID
+			break
 		}
-		href, exists := sel.Attr("href")
-		if !exists {
-			return
+		if v.DmmID != "" && scraper.NormalizeCode(v.DmmID) == normalized {
+			matchedID = v.ID
+			break
 		}
-		matches := videoIDPattern.FindStringSubmatch(href)
-		if len(matches) < 2 {
-			return
-		}
-		linkText := scraper.NormalizeCode(strings.TrimSpace(sel.Text()))
-		if strings.Contains(linkText, normalized) || strings.Contains(scraper.NormalizeCode(href), normalized) {
-			videoID = matches[1]
-		}
-	})
+	}
 
-	if videoID == "" {
+	if matchedID == 0 {
 		return []domain.VideoResult{{
 			SiteName: siteName,
 			Status:   domain.StatusNotFound,
@@ -218,94 +235,15 @@ func (s *Scraper) Search(ctx context.Context, code string) ([]domain.VideoResult
 	}
 
 	codeLower := strings.ToLower(code)
-	pageURL := fmt.Sprintf(s.baseURL+videoPathTmpl, videoID, codeLower)
-
-	videoSources := s.fetchVideoSources(ctx, pageURL, videoID)
-	if len(videoSources) == 0 {
-		constructed := fmt.Sprintf(s.baseURL+"/api/v1/videos/%s/manifest/master.m3u8", videoID)
-		videoSources = []domain.VideoSource{
-			{URL: constructed, Type: "application/x-mpegURL"},
-		}
-	}
+	m3u8URL := fmt.Sprintf("%s/api/v1/videos/%d/manifest/master.m3u8", s.baseURL, matchedID)
 
 	return []domain.VideoResult{{
-		SiteName:     siteName,
-		Status:       domain.StatusSuccess,
-		Version:      domain.VersionOriginal,
-		PageURL:      pageURL,
-		VideoSources: videoSources,
+		SiteName: siteName,
+		Status:   domain.StatusSuccess,
+		Version:  domain.VersionOriginal,
+		PageURL:  fmt.Sprintf("%s/cn/video/%d/%s", s.baseURL, matchedID, codeLower),
+		VideoSources: []domain.VideoSource{
+			{URL: m3u8URL, Type: "application/x-mpegURL"},
+		},
 	}}, nil
-}
-
-// fetchVideoSources fetches the video page and extracts M3U8 URLs.
-func (s *Scraper) fetchVideoSources(ctx context.Context, pageURL, videoID string) []domain.VideoSource {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pageURL, nil)
-	if err != nil {
-		return nil
-	}
-	req.Header.Set("User-Agent", userAgent)
-	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-
-	resp, err := s.client.Do(req)
-	if err != nil {
-		return nil
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		return nil
-	}
-
-	bodyBytes, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if err != nil {
-		return nil
-	}
-
-	bodyStr := string(bodyBytes)
-
-	matches := m3u8Pattern.FindAllString(bodyStr, -1)
-	if len(matches) > 0 {
-		seen := make(map[string]bool, len(matches))
-		sources := make([]domain.VideoSource, 0, len(matches))
-		for _, m := range matches {
-			if seen[m] {
-				continue
-			}
-			seen[m] = true
-			fullURL := m
-			if !strings.HasPrefix(m, "http") {
-				fullURL = s.baseURL + m
-			}
-			sources = append(sources, domain.VideoSource{
-				URL:  fullURL,
-				Type: "application/x-mpegURL",
-			})
-		}
-		return sources
-	}
-
-	doc, err := goquery.NewDocumentFromReader(strings.NewReader(bodyStr))
-	if err != nil {
-		return nil
-	}
-
-	var sources []domain.VideoSource
-	doc.Find("source, video").Each(func(_ int, sel *goquery.Selection) {
-		for _, attr := range []string{"src", "data-src"} {
-			src, exists := sel.Attr(attr)
-			if exists && strings.Contains(src, ".m3u8") {
-				fullURL := src
-				if !strings.HasPrefix(src, "http") {
-					fullURL = s.baseURL + src
-				}
-				sources = append(sources, domain.VideoSource{
-					URL:  fullURL,
-					Type: "application/x-mpegURL",
-				})
-				return
-			}
-		}
-	})
-
-	return sources
 }

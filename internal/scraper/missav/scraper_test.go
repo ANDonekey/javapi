@@ -111,6 +111,27 @@ const pageVideoWithSrcAttr = `<!DOCTYPE html>
 </body>
 </html>`
 
+const pageGarbage = `<!DOCTYPE html>
+<html>
+<head><title>ABC-123 Video</title></head>
+<body>
+<h1>ABC-123</h1>
+<p>大量垃圾内容 on this page</p>
+<video src="https://cdn.example.com/video.mp4"></video>
+</body>
+</html>`
+
+const pageWithNonVideoIframe = `<!DOCTYPE html>
+<html>
+<head><title>XYZ-999</title></head>
+<body>
+<h1>XYZ-999</h1>
+<video src="https://cdn.example.com/video.mp4"></video>
+<iframe src="https://ads.tracker.com/adframe"></iframe>
+<iframe src="https://social.example.com/share"></iframe>
+</body>
+</html>`
+
 func newTestScraper(srvURL string) *MISSAVScraper {
 	return &MISSAVScraper{
 		enabled:     true,
@@ -343,9 +364,9 @@ func TestSearchNoTitleMatchButHasSources(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 
-	assert.Equal(t, domain.StatusError, results[0].Status)
-	assert.Contains(t, results[0].Error, "title does not match")
-	assert.Len(t, results[0].VideoSources, 1)
+	assert.Equal(t, domain.StatusNotFound, results[0].Status)
+	assert.Contains(t, results[0].Error, "title does not match video code")
+	assert.Empty(t, results[0].VideoSources)
 }
 
 func TestSearchNoTitleMatchNoSources(t *testing.T) {
@@ -466,6 +487,59 @@ func TestVerifyTitleUnit(t *testing.T) {
 		doc := parseHTML(t, `<html><head><title>abc-123 video</title></head><body></body></html>`)
 		assert.True(t, verifyTitle(doc, "abc123"))
 	})
+}
+
+func TestSearchGarbage(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(pageGarbage))
+	}))
+	defer srv.Close()
+
+	s := newTestScraper(srv.URL)
+	results, err := s.Search(context.Background(), "ABC-123")
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.Equal(t, domain.StatusNotFound, results[0].Status)
+}
+
+func TestSearchFilterNonVideoIframe(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(pageWithNonVideoIframe))
+	}))
+	defer srv.Close()
+
+	s := newTestScraper(srv.URL)
+	results, err := s.Search(context.Background(), "XYZ-999")
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.Equal(t, domain.StatusSuccess, results[0].Status)
+	require.Len(t, results[0].VideoSources, 1)
+	assert.Equal(t, "https://cdn.example.com/video.mp4", results[0].VideoSources[0].URL)
+}
+
+func TestIsVideoDomain(t *testing.T) {
+	tests := []struct {
+		url      string
+		expected bool
+	}{
+		{"https://missav.ws/embed/abc", true},
+		{"https://asg.to/player/abc", true},
+		{"https://avmeet.com/video/abc", true},
+		{"https://player.example.com/video.m3u8", true},
+		{"https://cdn.stream.com/video.mp4", true},
+		{"https://ads.tracker.com/ad", false},
+		{"https://social.example.com/share", false},
+		{"https://google.com/", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.url, func(t *testing.T) {
+			assert.Equal(t, tt.expected, isVideoDomain(tt.url))
+		})
+	}
 }
 
 func parseHTML(t *testing.T, html string) *goquery.Document {

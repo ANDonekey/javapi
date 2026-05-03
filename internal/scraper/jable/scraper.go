@@ -150,14 +150,11 @@ func (s *Scraper) Search(ctx context.Context, code string) ([]domain.VideoResult
 	}
 
 	// 4. Fetch video page and extract player
-	playerURL, cnsubPlayerURL := extractPlayers(doc)
-	if playerURL == "" {
-		videoDoc, _, fetchErr := s.fetchPage(ctx, videoURL)
-		if fetchErr != nil {
-			return errorResult(formatted, fmt.Sprintf("video page: %v", fetchErr)), nil
-		}
-		playerURL, cnsubPlayerURL = extractPlayers(videoDoc)
+	videoDoc, _, fetchErr := s.fetchPage(ctx, videoURL)
+	if fetchErr != nil {
+		return errorResult(formatted, fmt.Sprintf("video page: %v", fetchErr)), nil
 	}
+	playerURL, cnsubPlayerURL := extractPlayers(videoDoc)
 
 	// 5. Build results — multi-version support
 	var results []domain.VideoResult

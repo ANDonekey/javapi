@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
@@ -149,18 +150,23 @@ func (s *MISSAVScraper) Search(ctx context.Context, code string) ([]domain.Video
 		}}, nil
 	}
 
+	if strings.Contains(bodyText, "大量垃圾") || strings.Contains(bodyText, "massive garbage") {
+		return []domain.VideoResult{{
+			SiteName: siteName, Status: domain.StatusNotFound,
+			Version: domain.VersionOriginal, PageURL: pageURL,
+		}}, nil
+	}
+
 	sources := extractVideoSources(doc)
 
 	normalizedCode := scraper.NormalizeCode(code)
 	titleOk := verifyTitle(doc, normalizedCode)
 
-	if !titleOk && len(sources) == 0 {
+	if !titleOk {
 		return []domain.VideoResult{{
-			SiteName: siteName,
-			Status:   domain.StatusNotFound,
-			Version:  domain.VersionOriginal,
-			PageURL:  pageURL,
-			Error:    "title does not match code and no video sources found",
+			SiteName: siteName, Status: domain.StatusNotFound,
+			Version: domain.VersionOriginal, PageURL: pageURL,
+			Error: "title does not match video code",
 		}}, nil
 	}
 
@@ -177,10 +183,6 @@ func (s *MISSAVScraper) Search(ctx context.Context, code string) ([]domain.Video
 		VideoSources: sources,
 		Subtitle:     false,
 		Leak:         false,
-	}
-	if !titleOk {
-		original.Status = domain.StatusError
-		original.Error = "page title does not match video code"
 	}
 	results = append(results, original)
 
@@ -248,6 +250,9 @@ func extractVideoSources(doc *goquery.Document) []domain.VideoSource {
 		if !exists || src == "" || seen[src] {
 			return
 		}
+		if !isVideoDomain(src) {
+			return
+		}
 		seen[src] = true
 		sources = append(sources, domain.VideoSource{
 			URL:  src,
@@ -256,6 +261,20 @@ func extractVideoSources(doc *goquery.Document) []domain.VideoSource {
 	})
 
 	return sources
+}
+
+func isVideoDomain(rawURL string) bool {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(u.Hostname())
+	for _, s := range []string{"missav", "asg.to", "avmeet", "avplayer", "player", "m3u8", "embed", "stream", "cdn"} {
+		if strings.Contains(host, s) {
+			return true
+		}
+	}
+	return false
 }
 
 func verifyTitle(doc *goquery.Document, normalizedCode string) bool {
