@@ -337,7 +337,7 @@ func extractPlayers(doc *goquery.Document) (string, string) {
 		if !exists || src == "" {
 			return
 		}
-		if playerURL == "" {
+		if playerURL == "" && isValidPlayerURL(src) {
 			playerURL = src
 		}
 	})
@@ -349,7 +349,9 @@ func extractPlayers(doc *goquery.Document) (string, string) {
 			if src == "" || playerURL != "" {
 				return
 			}
-			playerURL = resolveURL(baseURL, src)
+			if isValidPlayerURL(src) {
+				playerURL = resolveURL(baseURL, src)
+			}
 		})
 	}
 
@@ -361,7 +363,9 @@ func extractPlayers(doc *goquery.Document) (string, string) {
 			}
 			for _, attr := range []string{"data-src", "data-video", "data-url"} {
 				if val, exists := s.Attr(attr); exists && val != "" {
-					playerURL = val
+					if isValidPlayerURL(val) {
+						playerURL = val
+					}
 					return
 				}
 			}
@@ -380,7 +384,7 @@ func extractPlayers(doc *goquery.Document) (string, string) {
 					end := strings.IndexAny(script[start:], `"'`)
 					if end >= 0 {
 						candidate := script[start : start+end]
-						if strings.HasPrefix(candidate, "http") && playerURL == "" {
+						if strings.HasPrefix(candidate, "http") && playerURL == "" && isValidPlayerURL(candidate) {
 							playerURL = candidate
 						}
 					}
@@ -452,6 +456,24 @@ func errorResult(code string, msg string) []domain.VideoResult {
 		PageURL:  fmt.Sprintf("%s/search/%s/", baseURL, code),
 		Error:    msg,
 	}}
+}
+
+// isValidPlayerURL checks whether a raw URL looks like a real video player URL.
+func isValidPlayerURL(rawURL string) bool {
+	if rawURL == "" {
+		return false
+	}
+	lower := strings.ToLower(rawURL)
+	if strings.Contains(lower, ".m3u8") || strings.Contains(lower, ".mp4") || strings.Contains(lower, ".ts") ||
+		strings.Contains(lower, "/hls/") || strings.Contains(lower, "/embed/") || strings.Contains(lower, "/player/") ||
+		strings.Contains(lower, "mushroomtrack.com") || strings.Contains(lower, "surrit.com") {
+		return true
+	}
+	if strings.Contains(lower, "labadena") || strings.Contains(lower, "bluetraffic") ||
+		strings.Contains(lower, "smartpop") || strings.Contains(lower, "subid") || strings.Contains(lower, "/api/spots") {
+		return false
+	}
+	return false
 }
 
 // notFoundResult builds a not-found VideoResult slice.

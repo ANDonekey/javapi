@@ -186,7 +186,7 @@ func (s *MISSAVScraper) Search(ctx context.Context, code string) ([]domain.Video
 	}
 	results = append(results, original)
 
-	if hasSub {
+	if hasSub && len(sources) > 0 {
 		results = append(results, domain.VideoResult{
 			SiteName:     siteName,
 			Status:       domain.StatusSuccess,
@@ -198,7 +198,7 @@ func (s *MISSAVScraper) Search(ctx context.Context, code string) ([]domain.Video
 		})
 	}
 
-	if hasLeak {
+	if hasLeak && len(sources) > 0 {
 		results = append(results, domain.VideoResult{
 			SiteName:     siteName,
 			Status:       domain.StatusSuccess,
@@ -219,7 +219,7 @@ func extractVideoSources(doc *goquery.Document) []domain.VideoSource {
 
 	doc.Find("video source").Each(func(_ int, s *goquery.Selection) {
 		src, exists := s.Attr("src")
-		if !exists || src == "" || seen[src] {
+		if !exists || src == "" || seen[src] || !isValidVideoURL(src) {
 			return
 		}
 		seen[src] = true
@@ -235,7 +235,7 @@ func extractVideoSources(doc *goquery.Document) []domain.VideoSource {
 
 	doc.Find("video[src]").Each(func(_ int, s *goquery.Selection) {
 		src, exists := s.Attr("src")
-		if !exists || src == "" || seen[src] {
+		if !exists || src == "" || seen[src] || !isValidVideoURL(src) {
 			return
 		}
 		seen[src] = true
@@ -273,6 +273,22 @@ func isVideoDomain(rawURL string) bool {
 		if strings.Contains(host, s) {
 			return true
 		}
+	}
+	return false
+}
+
+func isValidVideoURL(rawURL string) bool {
+	if rawURL == "" {
+		return false
+	}
+	lower := strings.ToLower(rawURL)
+	if strings.Contains(lower, ".m3u8") || strings.Contains(lower, ".mp4") || strings.Contains(lower, ".ts") ||
+		strings.Contains(lower, "/hls/") || strings.Contains(lower, "surrit.com") || strings.Contains(lower, "cdn.") {
+		return true
+	}
+	if strings.Contains(lower, "bluetraffic") || strings.Contains(lower, "smartpop") ||
+		strings.Contains(lower, "labadena") || strings.Contains(lower, "subid") {
+		return false
 	}
 	return false
 }
