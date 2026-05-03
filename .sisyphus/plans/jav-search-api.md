@@ -1441,6 +1441,22 @@ func extractM3U8FromRawHTML(html string) []string {
 - 找到所有 `.m3u8` URL（包括藏在 script/data-* 中的）
 - 附加到现有 DOM 提取结果之后
 
+### 修复 2: Jable 用 CF 客户端 (小) ✅ 已部署
+
+### 结果
+
+| 站点 | 状态 | 说明 |
+|------|------|------|
+| AV01 | ✅ | M3U8 正常提取 |
+| javgg | ✅ | 3 个 embed URL |
+| Jable | ⚠️ | `#flag-form` — M3U8 在 JS 中动态加载 |
+| MISSAV | ⚠️ | srcs=0 — 页面结构变化，DOM 中无视频元素 |
+| 7mmtv | 🚫 | 需住宅代理 |
+
+### 后续
+
+Jable 的 M3U8 URL (`mushroomtrack.com`) 不在初始 HTML 中——由 JavaScript 动态加载，需要 headless browser 或 JS 执行引擎。
+
 ### 修复 2: Jable 用 CF 客户端 (小)
 
 Jable 使用纯 `net/http`（无 CF 绕过）。

@@ -179,7 +179,7 @@ func (s *MISSAVScraper) Search(ctx context.Context, code string) ([]domain.Video
 	normalizedCode := scraper.NormalizeCode(code)
 	titleOk := verifyTitle(doc, normalizedCode)
 
-	if !titleOk {
+	if !titleOk && len(sources) == 0 {
 		return []domain.VideoResult{{
 			SiteName: siteName, Status: domain.StatusNotFound,
 			Version: domain.VersionOriginal, PageURL: pageURL,

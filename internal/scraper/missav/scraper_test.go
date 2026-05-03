@@ -362,9 +362,9 @@ func TestSearchNoTitleMatchButHasSources(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 
-	assert.Equal(t, domain.StatusNotFound, results[0].Status)
-	assert.Contains(t, results[0].Error, "title does not match video code")
-	assert.Empty(t, results[0].VideoSources)
+	assert.Equal(t, domain.StatusSuccess, results[0].Status)
+	assert.Empty(t, results[0].Error)
+	assert.NotEmpty(t, results[0].VideoSources)
 }
 
 func TestSearchNoTitleMatchNoSources(t *testing.T) {
