@@ -2,11 +2,15 @@ package handler
 
 import (
 	"encoding/base64"
+	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
-	"time"
+
+	"github.com/henry/javapi/internal/scraper"
 )
 
 func ProxyM3U8(w http.ResponseWriter, r *http.Request) {
@@ -22,15 +26,23 @@ func ProxyM3U8(w http.ResponseWriter, r *http.Request) {
 	}
 	targetURL := string(decoded)
 
+	proxyURL := os.Getenv("SCRAPER_MISSAV_PROXY_URL")
+	log.Printf("m3u8 proxy: url=%s proxy=%s", targetURL[:min(80, len(targetURL))], proxyURL[:min(30, len(proxyURL))])
+
+	client := scraper.NewCFClient(proxyURL)
 	req, _ := http.NewRequestWithContext(r.Context(), "GET", targetURL, nil)
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:150.0) Gecko/20100101 Firefox/150.0")
+	req.Header.Set("User-Agent", scraper.FirefoxUA)
 	req.Header.Set("Accept", "application/vnd.apple.mpegurl,application/x-mpegURL,text/plain,*/*")
-	req.Header.Set("Referer", "https://missav.ws/")
-	client := &http.Client{Timeout: 10 * time.Second}
+	if strings.Contains(targetURL, "surrit.com") {
+		req.Header.Set("Referer", "https://missav.ws/")
+	}
 
 	resp, err := client.Do(req)
 	if err != nil || resp.StatusCode >= 400 {
-		writeError(w, http.StatusBadGateway, "failed to fetch M3U8")
+		status := 0
+		if resp != nil { status = resp.StatusCode }
+		log.Printf("m3u8 proxy: FAILED status=%d err=%v", status, err)
+		writeError(w, http.StatusBadGateway, fmt.Sprintf("failed to fetch M3U8 (HTTP %d)", status))
 		return
 	}
 	defer resp.Body.Close()
@@ -45,14 +57,12 @@ func ProxyM3U8(w http.ResponseWriter, r *http.Request) {
 			rewritten.WriteString(line + "\n")
 			continue
 		}
-		segmentURL := trimmed
-		if !strings.HasPrefix(segmentURL, "http") {
-			ref, _ := url.Parse(segmentURL)
-			if baseURL != nil && ref != nil {
-				segmentURL = baseURL.ResolveReference(ref).String()
-			}
+		segURL := trimmed
+		if !strings.HasPrefix(segURL, "http") && baseURL != nil {
+			ref, _ := url.Parse(segURL)
+			if ref != nil { segURL = baseURL.ResolveReference(ref).String() }
 		}
-		rewritten.WriteString(segmentURL + "\n")
+		rewritten.WriteString(segURL + "\n")
 	}
 
 	w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
