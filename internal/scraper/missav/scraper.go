@@ -114,6 +114,8 @@ func (s *MISSAVScraper) Search(ctx context.Context, code string) ([]domain.Video
 	req.Header.Set("Sec-Fetch-Mode", "navigate")
 	req.Header.Set("Sec-Fetch-Site", "none")
 	req.Header.Set("Sec-Fetch-User", "?1")
+	req.Header.Set("Referer", "https://missav.ws/")
+	req.Header.Set("Priority", "u=0, i")
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
