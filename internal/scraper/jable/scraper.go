@@ -457,6 +457,9 @@ func isValidPlayerURL(rawURL string) bool {
 		return false
 	}
 	lower := strings.ToLower(rawURL)
+	if strings.HasPrefix(lower, "#") || strings.HasPrefix(lower, "javascript:") {
+		return false
+	}
 	if strings.Contains(lower, "labadena") || strings.Contains(lower, "bluetraffic") ||
 		strings.Contains(lower, "smartpop") || strings.Contains(lower, "subid") ||
 		strings.Contains(lower, "/api/spots") || strings.Contains(lower, "/api/ads") ||
