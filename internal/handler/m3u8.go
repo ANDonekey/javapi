@@ -62,6 +62,7 @@ func fetchM3U8(r *http.Request, targetURL, proxyURL string) (string, error) {
 	var client *http.Client
 	if proxyURL != "" && (strings.Contains(targetURL, "acek-cdn") ||
 		strings.Contains(targetURL, "dramiyos-cdn") ||
+		strings.Contains(targetURL, "jav-vids.xyz") ||
 		strings.Contains(targetURL, "?t=")) {
 		client = scraper.NewCFClient(proxyURL)
 	} else {
