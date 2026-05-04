@@ -29,7 +29,10 @@ func ProxyM3U8(w http.ResponseWriter, r *http.Request) {
 
 	content, err := fetchM3U8(r, targetURL)
 	if err != nil {
-		writeError(w, http.StatusBadGateway, err.Error())
+		// Signed CDN URL (ASN-locked) - return original URL for browser direct access
+		w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Write([]byte(targetURL + "\n"))
 		return
 	}
 
