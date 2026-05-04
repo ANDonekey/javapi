@@ -5,8 +5,10 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
-	"time"
+
+	"github.com/henry/javapi/internal/scraper"
 )
 
 func ProxyM3U8(w http.ResponseWriter, r *http.Request) {
@@ -22,17 +24,15 @@ func ProxyM3U8(w http.ResponseWriter, r *http.Request) {
 	}
 	targetURL := string(decoded)
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	proxyURL := os.Getenv("SCRAPER_MISSAV_PROXY_URL")
+	client := scraper.NewCFClient(proxyURL)
 	req, _ := http.NewRequestWithContext(r.Context(), "GET", targetURL, nil)
-	req.Header.Set("User-Agent", "Mozilla/5.0")
+	req.Header.Set("User-Agent", scraper.FirefoxUA)
 	req.Header.Set("Accept", "application/vnd.apple.mpegurl,*/*")
 
 	resp, err := client.Do(req)
 	if err != nil || resp.StatusCode >= 400 {
-		w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(targetURL + "\n"))
+		writeError(w, http.StatusBadGateway, "failed to fetch M3U8")
 		return
 	}
 	defer resp.Body.Close()
