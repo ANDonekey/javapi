@@ -26,16 +26,18 @@ func ProxyM3U8(w http.ResponseWriter, r *http.Request) {
 	}
 	targetURL := string(decoded)
 
-	proxyURL := os.Getenv("SCRAPER_MISSAV_PROXY_URL")
-	log.Printf("m3u8 proxy: url=%s proxy=%s", targetURL[:min(80, len(targetURL))], proxyURL[:min(30, len(proxyURL))])
+	// Use fixed-session proxy for signed CDN URLs (jav-vids.xyz chain)
+	// so embed page and M3U8 fetch use same IP
+	proxyURL := os.Getenv("EMBED_PROXY_URL")
+	if proxyURL == "" {
+		proxyURL = os.Getenv("SCRAPER_MISSAV_PROXY_URL")
+	}
+	log.Printf("m3u8 proxy: url=%.60s proxy=%.30s", targetURL, proxyURL)
 
 	client := scraper.NewCFClient(proxyURL)
 	req, _ := http.NewRequestWithContext(r.Context(), "GET", targetURL, nil)
 	req.Header.Set("User-Agent", scraper.FirefoxUA)
 	req.Header.Set("Accept", "application/vnd.apple.mpegurl,application/x-mpegURL,text/plain,*/*")
-	if strings.Contains(targetURL, "surrit.com") {
-		req.Header.Set("Referer", "https://missav.ws/")
-	}
 
 	resp, err := client.Do(req)
 	if err != nil || resp.StatusCode >= 400 {
