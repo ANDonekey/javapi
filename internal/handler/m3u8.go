@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -37,41 +36,10 @@ func ProxyM3U8(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Resolve relative variant playlist URLs to absolute (needed for hls.js)
-	// Leave all other lines (.ts segments, tags) unchanged
-	content = resolveRelativeURLs(content, targetURL)
-
 	w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Cache-Control", "public, max-age=60")
 	w.Write([]byte(content))
-}
-
-func resolveRelativeURLs(content, baseURL string) string {
-	base, _ := url.Parse(baseURL)
-	if base == nil {
-		return content
-	}
-	var out strings.Builder
-	for _, line := range strings.Split(content, "\n") {
-		trimmed := strings.TrimSpace(line)
-		// Only resolve lines that are variant playlist URLs (.m3u8 or tokens)
-		// Leave tags (#), comments, empty lines, and .ts segments unchanged
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
-			out.WriteString(line + "\n")
-		} else if strings.Contains(trimmed, ".m3u8") {
-			if !strings.HasPrefix(trimmed, "http") {
-				ref, _ := url.Parse(trimmed)
-				if ref != nil {
-					trimmed = base.ResolveReference(ref).String()
-				}
-			}
-			out.WriteString(trimmed + "\n")
-		} else {
-			out.WriteString(line + "\n")
-		}
-	}
-	return out.String()
 }
 
 func fetchM3U8(r *http.Request, targetURL, proxyURL string) (string, error) {
