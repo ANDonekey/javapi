@@ -43,6 +43,7 @@ func ProxyM3U8(w http.ResponseWriter, r *http.Request) {
 		if bestURL != "" {
 			varContent, err := fetchM3U8(r, bestURL, proxyURL)
 			if err == nil {
+				varContent = resolveSegmentURLs(varContent, bestURL)
 				w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
 				w.Header().Set("Access-Control-Allow-Origin", "*")
 				w.Header().Set("Cache-Control", "public, max-age=60")
@@ -52,6 +53,7 @@ func ProxyM3U8(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	content = resolveSegmentURLs(content, targetURL)
 	w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Cache-Control", "public, max-age=60")
@@ -86,6 +88,31 @@ func fetchM3U8(r *http.Request, targetURL, proxyURL string) (string, error) {
 	}
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 5<<20))
 	return string(body), nil
+}
+
+func resolveSegmentURLs(content, baseURL string) string {
+	base, _ := url.Parse(baseURL)
+	if base == nil {
+		return content
+	}
+	var resolved strings.Builder
+	for _, line := range strings.Split(content, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			resolved.WriteString(line)
+			resolved.WriteString("\n")
+			continue
+		}
+		if !strings.HasPrefix(trimmed, "http") {
+			ref, _ := url.Parse(trimmed)
+			if ref != nil {
+				trimmed = base.ResolveReference(ref).String()
+			}
+		}
+		resolved.WriteString(trimmed)
+		resolved.WriteString("\n")
+	}
+	return resolved.String()
 }
 
 func pickBestVariant(content, baseURL string) (string, int) {
