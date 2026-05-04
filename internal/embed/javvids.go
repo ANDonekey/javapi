@@ -4,7 +4,7 @@ import (
 	"context"
 	"io"
 	"net/http"
-	"regexp"
+	"net/url"
 	"strings"
 
 	"github.com/henry/javapi/internal/scraper"
@@ -18,8 +18,6 @@ func (e *javvidsExtractor) MatchHost(host string) bool {
 	return host == "jav-vids.xyz"
 }
 
-var m3u8RE = regexp.MustCompile(`https?://[^\s'"<>]+\.(?:m3u8|txt)[^\s'"<>]*`)
-
 func (e *javvidsExtractor) Extract(ctx context.Context, client *http.Client, pageURL string) ([]string, error) {
 	req, _ := http.NewRequestWithContext(ctx, "GET", pageURL, nil)
 	req.Header.Set("User-Agent", "Mozilla/5.0")
@@ -32,31 +30,43 @@ func (e *javvidsExtractor) Extract(ctx context.Context, client *http.Client, pag
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
 	html := string(body)
 
-	var allURLs []string
-
-	allURLs = append(allURLs, scraper.ExtractM3U8FromRawHTML(html)...)
-
 	for _, unpacked := range scraper.UnpackJavascriptStrings(html) {
-		allURLs = append(allURLs, m3u8RE.FindAllString(unpacked, -1)...)
-	}
-
-	seen := make(map[string]bool)
-	var result []string
-	for _, u := range allURLs {
-		if !seen[u] {
-			seen[u] = true
-			result = append(result, u)
+		for _, key := range []string{`"hls4":"/stream/`, `"hls3":"/stream/`, `"/stream/`} {
+			idx := strings.Index(unpacked, key)
+			if idx < 0 {
+				continue
+			}
+			start := idx
+			if key == `"/stream/` {
+				start = idx + 1
+			} else {
+				start = idx + len(key) - len(`/stream/`)
+			}
+			remaining := unpacked[start:]
+			end := strings.IndexAny(remaining, `"'`)
+			if end > 0 {
+				relPath := remaining[:end]
+				relPath = strings.ReplaceAll(relPath, `\/`, `/`)
+				if strings.Contains(relPath, "master.m3u8") || strings.Contains(relPath, "index") {
+					base, _ := url.Parse(pageURL)
+					ref, _ := url.Parse(relPath)
+					if base != nil && ref != nil {
+						fullURL := base.ResolveReference(ref).String()
+						return []string{fullURL}, nil
+					}
+				}
+			}
 		}
 	}
 
-	for _, u := range result {
+	allURLs := scraper.ExtractM3U8FromRawHTML(html)
+	for _, u := range allURLs {
 		if strings.Contains(u, "jav-vids.xyz/stream/") || strings.Contains(u, "/stream/") {
 			return []string{u}, nil
 		}
 	}
-
-	if len(result) > 0 {
-		return result, nil
+	if len(allURLs) > 0 {
+		return allURLs, nil
 	}
 	return nil, nil
 }
