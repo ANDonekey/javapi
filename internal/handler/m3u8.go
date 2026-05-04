@@ -4,12 +4,12 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/henry/javapi/internal/scraper"
 )
@@ -29,10 +29,7 @@ func ProxyM3U8(w http.ResponseWriter, r *http.Request) {
 
 	content, err := fetchM3U8(r, targetURL)
 	if err != nil {
-		// Signed CDN URL (ASN-locked) - return original URL for browser direct access
-		w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Write([]byte(targetURL + "\n"))
+		writeError(w, http.StatusBadGateway, err.Error())
 		return
 	}
 
@@ -59,13 +56,10 @@ func ProxyM3U8(w http.ResponseWriter, r *http.Request) {
 }
 
 func fetchM3U8(r *http.Request, targetURL string) (string, error) {
-	var client *http.Client
-	if strings.Contains(targetURL, "acek-cdn") || strings.Contains(targetURL, "?t=") {
-		client = scraper.NewCFClient(os.Getenv("SCRAPER_MISSAV_PROXY_URL"))
-	} else {
-		client = &http.Client{Timeout: 10 * time.Second}
-	}
-
+	proxyURL := os.Getenv("SCRAPER_MISSAV_PROXY_URL")
+	log.Printf("m3u8 proxy: fetching %s (proxy=%s)", targetURL[:min(60,len(targetURL))], proxyURL[:min(20,len(proxyURL))])
+	
+	client := scraper.NewCFClient(proxyURL)
 	req, _ := http.NewRequestWithContext(r.Context(), "GET", targetURL, nil)
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:150.0) Gecko/20100101 Firefox/150.0")
 	req.Header.Set("Accept", "application/vnd.apple.mpegurl,application/x-mpegURL,text/plain,*/*")
