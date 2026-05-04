@@ -2,16 +2,18 @@ package handler
 
 import (
 	"encoding/base64"
+	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
 
 var m3u8Client = &http.Client{Timeout: 10 * time.Second}
 
-// ProxyM3U8 fetches a remote M3U8 playlist through the API.
-// Accepts a base64-encoded URL via the ?url= query parameter.
+// ProxyM3U8 fetches a remote M3U8 playlist, rewrites segment URLs to proxy through this API,
+// and returns the modified playlist to the client.
 func ProxyM3U8(w http.ResponseWriter, r *http.Request) {
 	encoded := r.URL.Query().Get("url")
 	if encoded == "" {
@@ -31,12 +33,7 @@ func ProxyM3U8(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	req, err := http.NewRequestWithContext(r.Context(), "GET", targetURL, nil)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to create request")
-		return
-	}
-
+	req, _ := http.NewRequestWithContext(r.Context(), "GET", targetURL, nil)
 	req.Header.Set("User-Agent", "Mozilla/5.0")
 	req.Header.Set("Accept", "application/vnd.apple.mpegurl,application/x-mpegURL,*/*")
 
@@ -47,8 +44,45 @@ func ProxyM3U8(w http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Body.Close()
 
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 5<<20))
+	content := string(body)
+
+	baseURL, _ := url.Parse(targetURL)
+
+	var rewritten strings.Builder
+	for _, line := range strings.Split(content, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			rewritten.WriteString(line)
+			rewritten.WriteString("\n")
+			continue
+		}
+
+		segmentURL := trimmed
+		if !strings.HasPrefix(segmentURL, "http") {
+			ref, _ := url.Parse(segmentURL)
+			if baseURL != nil && ref != nil {
+				segmentURL = baseURL.ResolveReference(ref).String()
+			}
+		}
+
+		encodedSegment := base64.URLEncoding.EncodeToString([]byte(segmentURL))
+		proxyURL := fmt.Sprintf("%s://%s/api/v1/m3u8?url=%s",
+			getScheme(r), r.Host, encodedSegment)
+		rewritten.WriteString(proxyURL)
+		rewritten.WriteString("\n")
+	}
+
 	w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Cache-Control", "public, max-age=60")
 	w.WriteHeader(http.StatusOK)
-	io.Copy(w, io.LimitReader(resp.Body, 5<<20))
+	w.Write([]byte(rewritten.String()))
+}
+
+func getScheme(r *http.Request) string {
+	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+		return "https"
+	}
+	return "http"
 }
