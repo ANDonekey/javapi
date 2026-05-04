@@ -5,63 +5,48 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
-
-	"github.com/henry/javapi/internal/scraper"
+	"time"
 )
 
-// ProxyM3U8 fetches a remote M3U8 playlist, rewrites segment URLs to proxy through this API,
-// and returns the modified playlist to the client.
 func ProxyM3U8(w http.ResponseWriter, r *http.Request) {
 	encoded := r.URL.Query().Get("url")
 	if encoded == "" {
-		writeError(w, http.StatusBadRequest, "url parameter is required (base64-encoded)")
+		writeError(w, http.StatusBadRequest, "url parameter is required")
 		return
 	}
-
 	decoded, err := base64.URLEncoding.DecodeString(encoded)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid base64 encoding")
+	if err != nil || (!strings.HasPrefix(string(decoded), "https://") && !strings.HasPrefix(string(decoded), "http://")) {
+		writeError(w, http.StatusBadRequest, "invalid URL")
 		return
 	}
-
 	targetURL := string(decoded)
-	if !strings.HasPrefix(targetURL, "https://") && !strings.HasPrefix(targetURL, "http://") {
-		writeError(w, http.StatusBadRequest, "only HTTP/HTTPS URLs are allowed")
-		return
-	}
 
+	client := &http.Client{Timeout: 10 * time.Second}
 	req, _ := http.NewRequestWithContext(r.Context(), "GET", targetURL, nil)
 	req.Header.Set("User-Agent", "Mozilla/5.0")
-	req.Header.Set("Accept", "application/vnd.apple.mpegurl,application/x-mpegURL,*/*")
+	req.Header.Set("Accept", "application/vnd.apple.mpegurl,*/*")
 
-	proxyURL := os.Getenv("SCRAPER_MISSAV_PROXY_URL")
-	if proxyURL == "" {
-		proxyURL = os.Getenv("SCRAPER_PROXY_URL")
-	}
-	client := scraper.NewCFClient(proxyURL)
 	resp, err := client.Do(req)
-	if err != nil {
-		writeError(w, http.StatusBadGateway, "failed to fetch M3U8")
+	if err != nil || resp.StatusCode >= 400 {
+		w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(targetURL + "\n"))
 		return
 	}
 	defer resp.Body.Close()
-
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 5<<20))
 	content := string(body)
 
 	baseURL, _ := url.Parse(targetURL)
-
 	var rewritten strings.Builder
 	for _, line := range strings.Split(content, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
-			rewritten.WriteString(line)
-			rewritten.WriteString("\n")
+			rewritten.WriteString(line + "\n")
 			continue
 		}
-
 		segmentURL := trimmed
 		if !strings.HasPrefix(segmentURL, "http") {
 			ref, _ := url.Parse(segmentURL)
@@ -69,22 +54,11 @@ func ProxyM3U8(w http.ResponseWriter, r *http.Request) {
 				segmentURL = baseURL.ResolveReference(ref).String()
 			}
 		}
-
-		// Write absolute URL directly (no proxy for .ts segments)
-		rewritten.WriteString(segmentURL)
-		rewritten.WriteString("\n")
+		rewritten.WriteString(segmentURL + "\n")
 	}
 
 	w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Cache-Control", "public, max-age=60")
-	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(rewritten.String()))
-}
-
-func getScheme(r *http.Request) string {
-	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
-		return "https"
-	}
-	return "http"
 }
