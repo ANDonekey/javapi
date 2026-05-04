@@ -4,8 +4,8 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -30,14 +30,16 @@ func ProxyM3U8(w http.ResponseWriter, r *http.Request) {
 	if proxyURL == "" {
 		proxyURL = os.Getenv("SCRAPER_MISSAV_PROXY_URL")
 	}
-	log.Printf("m3u8 proxy: url=%.60s proxy=%.30s", targetURL, proxyURL)
 
 	content, err := fetchM3U8(r, targetURL, proxyURL)
 	if err != nil {
-		log.Printf("m3u8 proxy: FAILED err=%v", err)
-		writeError(w, http.StatusBadGateway, fmt.Sprintf("failed to fetch M3U8: %v", err))
+		writeError(w, http.StatusBadGateway, "failed to fetch M3U8: "+err.Error())
 		return
 	}
+
+	// Resolve relative variant playlist URLs to absolute (needed for hls.js)
+	// Leave all other lines (.ts segments, tags) unchanged
+	content = resolveRelativeURLs(content, targetURL)
 
 	w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -45,9 +47,35 @@ func ProxyM3U8(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(content))
 }
 
+func resolveRelativeURLs(content, baseURL string) string {
+	base, _ := url.Parse(baseURL)
+	if base == nil {
+		return content
+	}
+	var out strings.Builder
+	for _, line := range strings.Split(content, "\n") {
+		trimmed := strings.TrimSpace(line)
+		// Only resolve lines that are variant playlist URLs (.m3u8 or tokens)
+		// Leave tags (#), comments, empty lines, and .ts segments unchanged
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			out.WriteString(line + "\n")
+		} else if strings.Contains(trimmed, ".m3u8") {
+			if !strings.HasPrefix(trimmed, "http") {
+				ref, _ := url.Parse(trimmed)
+				if ref != nil {
+					trimmed = base.ResolveReference(ref).String()
+				}
+			}
+			out.WriteString(trimmed + "\n")
+		} else {
+			out.WriteString(line + "\n")
+		}
+	}
+	return out.String()
+}
+
 func fetchM3U8(r *http.Request, targetURL, proxyURL string) (string, error) {
 	var client *http.Client
-
 	if proxyURL != "" && (strings.Contains(targetURL, "acek-cdn") ||
 		strings.Contains(targetURL, "dramiyos-cdn") ||
 		strings.Contains(targetURL, "?t=")) {
@@ -74,4 +102,3 @@ func fetchM3U8(r *http.Request, targetURL, proxyURL string) (string, error) {
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 5<<20))
 	return string(body), nil
 }
-
