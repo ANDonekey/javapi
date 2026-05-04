@@ -59,5 +59,23 @@ func (e *javvidsExtractor) Extract(ctx context.Context, client *http.Client, pag
 			}
 		}
 	}
+	for _, unpacked := range scraper.UnpackJavascriptStrings(html) {
+		start := 0
+		for {
+			idx := strings.Index(unpacked[start:], "/stream/")
+			if idx < 0 {
+				break
+			}
+			absIdx := start + idx
+			end := strings.Index(unpacked[absIdx:], ".m3u8")
+			if end > 0 {
+				relPath := unpacked[absIdx : absIdx+end+5]
+				relPath = strings.ReplaceAll(relPath, `\/`, `/`)
+				fullURL := "https://jav-vids.xyz" + relPath
+				return []string{fullURL}, nil
+			}
+			start = absIdx + 8
+		}
+	}
 	return nil, nil
 }
