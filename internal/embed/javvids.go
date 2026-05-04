@@ -29,8 +29,20 @@ func (e *javvidsExtractor) Extract(ctx context.Context, client *http.Client, pag
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
 	html := string(body)
 
-	if urls := scraper.ExtractM3U8FromRawHTML(html); len(urls) > 0 {
-		return urls, nil
+	allURLs := scraper.ExtractM3U8FromRawHTML(html)
+	var streamURLs, otherURLs []string
+	for _, u := range allURLs {
+		if strings.Contains(u, "jav-vids.xyz/stream/") {
+			streamURLs = append(streamURLs, u)
+		} else {
+			otherURLs = append(otherURLs, u)
+		}
+	}
+	if len(streamURLs) > 0 {
+		return streamURLs, nil
+	}
+	if len(otherURLs) > 0 {
+		return otherURLs, nil
 	}
 
 	for _, line := range strings.Split(html, "\n") {
@@ -40,7 +52,7 @@ func (e *javvidsExtractor) Extract(ctx context.Context, client *http.Client, pag
 				end := strings.IndexAny(line[start:], `"'`)
 				if end > 0 {
 					candidate := line[start : start+end]
-					if strings.Contains(candidate, ".m3u8") {
+					if strings.Contains(candidate, ".m3u8") && strings.Contains(candidate, "jav-vids.xyz/stream/") {
 						return []string{candidate}, nil
 					}
 				}
