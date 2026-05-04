@@ -139,7 +139,23 @@ func (s *Scraper) Search(ctx context.Context, code string) ([]domain.VideoResult
 	if fetchErr != nil {
 		return errorResult(formatted, fmt.Sprintf("video page: %v", fetchErr)), nil
 	}
-	playerURL, cnsubPlayerURL := extractPlayers(videoDoc, rawVideoHTML)
+
+	// Priority 1: Search raw HTML for M3U8 URLs (mushroomtrack.com etc)
+	playerURL, cnsubPlayerURL := "", ""
+	m3u8URLs := scraper.ExtractM3U8FromRawHTML(rawVideoHTML)
+	for _, url := range m3u8URLs {
+		if !strings.Contains(url, "jable.tv/search") && !strings.Contains(url, "assets-cdn") {
+			playerURL = url
+			break
+		}
+	}
+
+	// Priority 2: Fall back to DOM-based extraction
+	if playerURL == "" {
+		playerURL, cnsubPlayerURL = extractPlayers(videoDoc, rawVideoHTML)
+	} else {
+		_, cnsubPlayerURL = extractPlayers(videoDoc, rawVideoHTML)
+	}
 
 	// 5. Build results — multi-version support
 	var results []domain.VideoResult
