@@ -1344,182 +1344,99 @@ curl -s -H "X-API-Key: test-key" "http://localhost:8080/api/v1/search?code=ABC-1
 - **URL**: https://javapi-rxgl.onrender.com
 - **Platform**: Render.com free tier
 - **Repo**: https://github.com/ANDonekey/javapi
+- **Auth**: Disabled (`AUTH_DISABLED=true`)
+- **Cache**: Disabled (`CACHE_DISABLED=true`)
 
-### Scraper Status (tested with MIDA-492 on Render)
+### Active Scrapers (5 total, 4 working)
 
-| Scraper | CF Bypass | Proxy | Live Status |
-|---------|-----------|-------|-------------|
-| MISSAV | cloudscraper_go+CycleTLS | ✅ | — (startup timeout?) |
-| Jable | ✅ | ✅ | ✅ success (1 source) |
-| JAVMENU | ✅ | ✅ | not_found |
-| HAYAV | ✅ | ✅ | blocked → **proxy added** |
-| javgg | ✅ | ✅ | ✅ success (3 sources) |
-| AV01 | ✅ | ✅ | error |
-| 7mmtv | ✅ | ✅ | blocked → **proxy added** |
+| Scraper | Status | M3U8 Source | CF Bypass | Proxy |
+|---------|--------|-------------|-----------|-------|
+| **MISSAV** | ✅ | `surrit.com` (JS unpacked) | Fresh JA3 per retry | ✅ |
+| **Jable** | ✅ | `mushroomtrack.com` (raw HTML regex) | CycleTLS client | — |
+| **javgg** | ✅ | `jav-vids.xyz/stream/` (embed resolver) | CycleTLS client | ✅ EMBED_PROXY_URL |
+| **AV01** | ✅ | JSON API → `master.m3u8` | — | — |
+| **7mmtv** | 🚫 | CF blocked (needs residential proxy) | — | ❌ datacenter blocked |
 
-### Completed Post-Plan Improvements
-- [x] **cloudscraper_go + CycleTLS** integrated (was stub, now real)
-- [x] **CF marker fix**: removed "Cloudflare"/"challenge-platform" from blockers
-- [x] **Per-site proxy**: YAML + `SCRAPER_{NAME}_PROXY_URL` env var
-- [x] **ApplyConfig()**: post-init config injection in scraper registry
-- [x] **Render deployment**: live, auto-deploy on push
+### Removed
+- **hayav**: CF impossible
+- **javmenu**: Poor content quality
+- **supjav**: CF impossible
 
-### Known Improvements (for user to decide)
+### Key Features Implemented
 
-| Priority | Improvement | Effort | Impact |
-|----------|-------------|--------|--------|
-| ~~🔴 P0~~ | ~~验证 hayav/7mmtv 代理~~ | ✅ Done | 代理生效但数据中心IP仍被CF拦 |
-| 🟡 P1 | **hayav 标记不支持** (CF不可绕过) | 小 | 清理代码 |
-| 🟡 P1 | **javmenu 标记不支持** (内容欠佳) | 小 | 清理代码 |
-| 🟡 P1 | **AV01 修复** — 搜索端点 + M3U8提取 | 中 | 7→5→6 爬虫可用 |
-| 🟡 P1 | **Jable URL 格式修复** — pageUrl 含搜索URL | 小 | 用户体验 |
-| 🟢 P2 | **缓存 TTL 可配置化** | 小 | — |
-| 🟢 P2 | **健康检查中显示爬虫状态** | 小 | — |
-| 🔵 P3 | **Ja3 指纹 + 住宅代理** 突破CF | 大 | — |
-| 🔵 P3 | **更多爬虫站点** | 大 | — |
+| Feature | Description |
+|---------|-------------|
+| **Fresh JA3 per retry** | `cloudscraper.Init()` called each attempt, random browser fingerprint |
+| **3-retry backoff** | CF bypass retries 3x with 1s/2s/3s backoff, 30s on 421 |
+| **JS Unpacker** | Dean Edwards packed JS decoder (finds M3U8 in surrit.com) |
+| **Raw HTML M3U8 regex** | `ExtractM3U8FromRawHTML()` — finds URLs DOM selectors miss |
+| **Embed resolver** | `internal/embed/` — extracts M3U8 from jav-vids.xyz embed pages |
+| **Stream URL construction** | Parses packed JS dictionary for `/stream/` paths |
+| **M3U8 proxy** | `/api/v1/m3u8?url=<base64>` — fetches + resolves master→variant |
+| **Master playlist resolution** | Auto-selects highest bandwidth variant (1080p) |
+| **Generic proxy** | `/api/v1/proxy?url=<base64>` — any URL through API |
+| **Per-site proxy** | `SCRAPER_{NAME}_PROXY_URL` env vars + YAML config |
+| **Fixed session proxy** | `EMBED_PROXY_URL` with `-session-` prefix for same-IP chain |
+| **Performance timing** | Response includes per-module ms breakdown |
+| **Test frontend** | `/test/` — dark theme, hls.js player, M3U8 viewer |
+| **MIDA-492 sample** | 1080p variant saved as reference at `/tmp/mida492_1080p_sample.m3u8` |
+
+### API Endpoints
+
+| Endpoint | Auth | Description |
+|----------|------|-------------|
+| `GET /api/health` | No | Health check |
+| `GET /api/v1/search?code={CODE}` | No* | Search JAV code |
+| `GET /api/v1/m3u8?url=<base64>` | No* | M3U8 proxy (master→variant resolution) |
+| `GET /api/v1/proxy?url=<base64>` | No* | Generic URL proxy |
+| `GET /test/` | No | Frontend test page |
+
+*Auth currently disabled via `AUTH_DISABLED=true`
+
+### Architecture
+
+```
+Search Request
+  ├─ Cache check (memory)
+  ├─ JavDB API (metadata)
+  └─ Scrapers (parallel, semaphore cap=6)
+       ├─ MISSAV → cycleTLS → surrit.com M3U8
+       ├─ Jable  → raw HTML regex → mushroomtrack.com M3U8
+       ├─ javgg  → embed resolver → jav-vids.xyz/stream/ M3U8
+       ├─ AV01   → JSON API → master.m3u8
+       └─ 7mmtv  → CF blocked
+  └─ Embed resolution (post-scrape)
+  └─ Timing aggregation
+  └─ Response
+```
+
+### Performance (MIDA-492 on Render)
+
+| Module | Time | Type |
+|--------|------|------|
+| MISSAV | 16,007ms | 🌐 Network (CF bypass + proxy) |
+| javgg | 5,185ms | 🌐 Network (embed resolve) |
+| AV01 | 1,908ms | 🌐 Network (API) |
+| Jable | 1,901ms | 🌐 Network (page fetch) |
+| JavDB | 866ms | 🌐 Network (API) |
+| Cache | <1ms | 💻 Compute |
+
 
 ---
 
-## P1 修复计划: 爬虫清理 + AV01/Jable 修复
+## Known Issues
 
-### 1. 标记不支持站点 (小)
+| Issue | Impact | Status |
+|-------|--------|--------|
+| 7mmtv CF blocked | No M3U8 from 7mmtv | Need residential proxy |
+| MISSAV slow (16s) | Longest response time | CF bypass + proxy overhead |
+| javgg only 1 of 3 embed hosts resolved | javggvideo.xyz, javstreamhg.xyz not extracted | Need extractors |
 
-| 站点 | 原因 | 操作 |
-|------|------|------|
-| **hayav** | CF 无法绕过 (数据中心代理也被拦) | 移除 hayav 爬虫目录，从 main.go 移除 import |
-| **javmenu** | 内容欠佳 (视频质量/可用性不足) | 移除 javmenu 爬虫目录，从 main.go 移除 import |
-| **supjav** | CF 无法绕过 (之前已标记) | 已排除，确认无残留 |
+## Future Improvements
 
-### 2. AV01 修复 (中)
-
-**当前问题**：搜索端点错误 + M3U8 提取逻辑错
-
-**正确 API**（用户发现）：
-```
-POST https://www.av01.media/api/v1/videos/search?lang=cn&comp=true
-Body: {"pagination":{"limit":20,"page":1},"query":"MIDA-492"}
-Response: {"videos":[{"id":203184,"dvd_id":"MIDA-492","dmm_id":"mida00492"}]}
-M3U8: /api/v1/videos/{id}/manifest/master.m3u8?hb=XXXX
-```
-
-**修改**：恢复 JSON API（原版类似但参数不同 lang=ja→cn, 加comp=true）
-
-### 3. Jable URL 修复 (小)
-
-**Bug 位置**：`jable/scraper.go:153` — `extractPlayers(doc)` 在搜索页文档上调用
-- 搜索页有 `data-src` 或 `<script>` 含模板 URL `%QUERY%`
-- `extractPlayers` 误提取为视频源 → 跳过视频页抓取
-- **修复**：移除搜索页上的 `extractPlayers`，始终抓取视频页
-
-### 4. MISSAV 垃圾内容修复 (中)
-
-**Bug 1 — 垃圾内容**（行 141-157）：
-- 缺少中文反爬检测 "大量垃圾内容"
-- Title 不匹配时应直接返回 NotFound
-
-**Bug 2 — 重复结果**（行 167-205）：
-- `hasSub`/`hasLeak` 在垃圾页上误判
-- 多版本检测应在 titleOk 后才执行
-- 所有变体共享同一个 mutable sources slice
-
-## P2 修复: M3U8 提取增强 (借鉴参考项目 missav)
-
-### 问题
-参考项目 `/home/henry/code/missav` 能成功提取 MISSAV/Jable 的 M3U8 URL，但 JAVprovide 不能。
-JAVprovide 用 DOM 选择器 (goquery)，参考项目用**原始 HTML 正则搜索**。
-
-### 修复 1: 通用 M3U8 正则提取 (中)
-
-在 Jable 和 MISSAV 中添加 `extractM3U8FromRawHTML(html string) []string`:
-```go
-func extractM3U8FromRawHTML(html string) []string {
-    re := regexp.MustCompile(`https?://[^'"\\\s<>]+\.m3u8[^'"\\\s<>]*`)
-    return re.FindAllString(html, -1)
-}
-```
-- 扫描整个原始 HTML body（不限 DOM 元素）
-- 找到所有 `.m3u8` URL（包括藏在 script/data-* 中的）
-- 附加到现有 DOM 提取结果之后
-
-## M3U8 代理端点 — 为前端提供可播放的 M3U8
-
-### 需求
-嵌入页解析返回的 M3U8 URL 存在 CORS 跨域问题。前端无法直接 fetch。
-需要 API 提供代理端点，获取 M3U8 内容并返回给前端。
-
-### 方案
-
-```
-前端                     JAV API                 CDN
-  │                        │                      │
-  │ GET /api/v1/m3u8?url=<encoded>                │
-  │──────────────────────→│                      │
-  │                        │ GET <m3u8_url>       │
-  │                        │─────────────────────→│
-  │                        │      M3U8 content    │
-  │                        │←─────────────────────│
-  │    M3U8 content        │                      │
-  │    (CORS headers)      │                      │
-  │←──────────────────────│                      │
-```
-
-实现：
-1. 新端点 `GET /api/v1/m3u8?url=<base64_encoded_m3u8_url>`
-2. 获取目标 M3U8 文件
-3. 返回内容 + CORS headers
-4. 验证 URL 为已知 M3U8 域名（安全）
-5. 缓存 M3U8 内容（短 TTL，如 60s）
-
-### 背景
-javgg 返回 `https://jav-vids.xyz/embed/me3diq35ekqx` 但这不是直接可播放的 M3U8。
-需要进一步获取嵌入页，从中提取真正的 M3U8 URL。
-
-参考项目 `missav/embed.go` 有完整的嵌入解析系统（5 个提取器 + 通用后备）。
-
-### 验证范围
-**仅 `jav-vids.xyz`** — 作为技术验证。成功后扩展到其他嵌入站点。
-
-### 技术方案
-
-```
-javgg scraper 返回:
-  https://jav-vids.xyz/embed/me3diq35ekqx
-
-↓ 新增: EmbedResolver 服务
-
-1. 匹配 embed host (jav-vids.xyz)
-2. HTTP GET 嵌入页 (使用 CycleTLS)
-3. 正则/JS解包 提取 M3U8 URL
-4. 替换 VideoSource URL
-
-javgg 现在返回:
-  https://cdn.xxx.com/stream.m3u8  ← 真实 M3U8
-```
-
-### 实现步骤
-
-1. 创建 `internal/embed/` 包
-   - `resolver.go` — EmbedResolver 接口 + 注册表
-   - `javvids.go` — jav-vids.xyz 提取器
-   - `generic.go` — 通用正则后备
-
-2. 注册提取器 (init 模式)
-   ```go
-   type EmbedExtractor interface {
-       MatchHost(host string) bool
-       Extract(ctx, pageURL string) ([]string, error)
-   }
-   ```
-
-3. 在 aggregator 中集成
-   - 收集所有 VideoSources
-   - 对匹配 embed host 的 URL 调用解析
-   - 替换为解析后的 M3U8 URL
-
-4. 测试: `MIDA-492` → javgg 返回真实 M3U8 而非嵌入页 URL
-
-Jable 使用纯 `net/http`（无 CF 绕过）。
-替换为 `scraper.NewCFClient(proxyURL)`（与 MISSAV 相同）:
-- init() 中创建 CF 客户端
-- SetProxyConfig 中重建 CF 客户端
-
+| Priority | Item | Effort |
+|----------|------|--------|
+| P1 | Residential proxy for 7mmtv/surrit CDN | Medium |
+| P1 | Add javggvideo.xyz + javstreamhg.xyz extractors | Small |
+| P2 | Cache TTL configurable | Small |
+| P3 | Headless browser (chromedp) for JS-only M3U8 | Large |

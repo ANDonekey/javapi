@@ -25,8 +25,8 @@ import (
 	_ "github.com/henry/javapi/internal/scraper/av01"
 	_ "github.com/henry/javapi/internal/scraper/jable"
 	_ "github.com/henry/javapi/internal/scraper/javgg"
-	_ "github.com/henry/javapi/internal/scraper/missav"
-	_ "github.com/henry/javapi/internal/scraper/sevenmmtv"
+	// _ "github.com/henry/javapi/internal/scraper/missav"     // temporarily disabled: too slow (16s)
+	// _ "github.com/henry/javapi/internal/scraper/sevenmmtv"  // temporarily disabled: CF blocked
 
 	// Register embed extractors via init()
 	_ "github.com/henry/javapi/internal/embed"
