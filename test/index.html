@@ -940,6 +940,10 @@
                         <h3 style="font-size: 0.9rem; color: var(--text-secondary); margin: 0;">M3U8 Playlist Content</h3>
                         <button class="btn btn-secondary btn-sm" onclick="copyM3u8Content()">📋 Copy</button>
                     </div>
+                    <div id="m3u8VariantInfo" style="display: none; margin-bottom: var(--space-md); padding: var(--space-md); background: var(--bg-tertiary); border-radius: var(--radius-md); border: 1px solid var(--bg-elevated);">
+                        <div style="font-size: 0.8rem; font-weight: 600; color: var(--accent-secondary); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: var(--space-sm);">🎬 Master Playlist — Variants</div>
+                        <div id="m3u8VariantList" style="display: flex; flex-wrap: wrap; gap: var(--space-sm);"></div>
+                    </div>
                     <textarea id="m3u8-content" readonly class="input-field" style="width: 100%; height: 200px; font-family: var(--font-mono); font-size: 0.8rem; resize: vertical;"></textarea>
                 </div>
 
@@ -1302,6 +1306,53 @@
             return await resp.text();
         }
 
+        function parseVariants(m3u8Content) {
+            const lines = m3u8Content.split('\n');
+            const variants = [];
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i].trim();
+                if (!line.startsWith('#EXT-X-STREAM-INF') || line.includes('I-FRAME')) continue;
+                const attrs = {};
+                line.split(',').filter(Boolean).forEach(part => {
+                    const eq = part.indexOf('=');
+                    if (eq > 0) {
+                        attrs[part.substring(0, eq).trim()] = part.substring(eq + 1).trim();
+                    } else {
+                        attrs[attrs.length] = part.trim();
+                    }
+                });
+                if (i + 1 < lines.length) {
+                    const next = lines[i + 1].trim();
+                    if (next && !next.startsWith('#')) {
+                        variants.push({ url: next, ...attrs });
+                        i++;
+                    }
+                }
+            }
+            return variants;
+        }
+
+        function displayVariantInfo(variants) {
+            const infoDiv = document.getElementById('m3u8VariantInfo');
+            const listDiv = document.getElementById('m3u8VariantList');
+            if (!variants.length) {
+                infoDiv.style.display = 'none';
+                return;
+            }
+            infoDiv.style.display = 'block';
+            listDiv.innerHTML = '';
+            const best = variants.reduce((a, b) => (parseInt(b.BANDWIDTH) || 0) > (parseInt(a.BANDWIDTH) || 0) ? b : a, variants[0]);
+            variants.forEach(v => {
+                const bw = parseInt(v.BANDWIDTH) || 0;
+                const bwLabel = bw >= 1000000 ? (bw / 1000000).toFixed(1) + ' Mbps' : bw >= 1000 ? Math.round(bw / 1000) + ' Kbps' : bw + ' bps';
+                const res = v.RESOLUTION || '?';
+                const isBest = v.url === best.url;
+                listDiv.innerHTML += `<span style="display: inline-flex; align-items: center; gap: 4px; background: ${isBest ? 'rgba(74,222,128,0.15)' : 'var(--bg-elevated)'}; color: ${isBest ? 'var(--success)' : 'var(--text-secondary)'}; padding: 4px 10px; border-radius: var(--radius-sm); font-family: var(--font-mono); font-size: 0.75rem; border: 1px solid ${isBest ? 'rgba(74,222,128,0.3)' : 'transparent'};">
+                    ${isBest ? '⭐' : '•'} ${res} · ${bwLabel}
+                </span>`;
+            });
+        }
+
         async function fetchAndShowM3U8(videoIndex) {
             if (!searchResults || !searchResults.videos[videoIndex]) return;
 
@@ -1313,7 +1364,6 @@
                 return;
             }
 
-            // Find first M3U8 source, fall back to first source
             const m3u8Source = sources.find(s => s.type === 'application/x-mpegURL' || s.url.includes('.m3u8')) || sources[0];
 
             try {
@@ -1321,6 +1371,8 @@
                 const content = await fetchM3U8(m3u8Source.url);
                 document.getElementById('m3u8-content').textContent = content;
                 document.getElementById('m3u8Section').style.display = 'block';
+                const variants = parseVariants(content);
+                displayVariantInfo(variants);
                 showToast('M3U8 loaded successfully', 'success');
             } catch (error) {
                 showToast(`Failed to fetch M3U8: ${error.message}`, 'error');
