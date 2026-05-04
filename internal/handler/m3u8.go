@@ -46,13 +46,14 @@ func ProxyM3U8(w http.ResponseWriter, r *http.Request) {
 			log.Printf("m3u8 proxy: resolved master→variant bw=%d url=%.60s", bestBW, bestURL)
 			varContent, ferr := fetchM3U8(r, bestURL, proxyURL)
 			if ferr == nil {
-				content = rewriteSegments(varContent, bestURL)
-			} else {
-				log.Printf("m3u8 proxy: variant fetch failed err=%v", ferr)
+				w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
+				w.Header().Set("Access-Control-Allow-Origin", "*")
+				w.Header().Set("Cache-Control", "public, max-age=60")
+				w.Write([]byte(varContent))
+				return
 			}
+			log.Printf("m3u8 proxy: variant fetch failed err=%v", ferr)
 		}
-	} else {
-		content = rewriteSegments(content, targetURL)
 	}
 
 	w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
