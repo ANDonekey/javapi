@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -34,6 +36,20 @@ func ProxyM3U8(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "failed to fetch M3U8: "+err.Error())
 		return
+	}
+
+	if strings.Contains(content, "#EXT-X-STREAM-INF") {
+		bestURL, _ := pickBestVariant(content, targetURL)
+		if bestURL != "" {
+			varContent, err := fetchM3U8(r, bestURL, proxyURL)
+			if err == nil {
+				w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
+				w.Header().Set("Access-Control-Allow-Origin", "*")
+				w.Header().Set("Cache-Control", "public, max-age=60")
+				w.Write([]byte(varContent))
+				return
+			}
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
@@ -69,4 +85,40 @@ func fetchM3U8(r *http.Request, targetURL, proxyURL string) (string, error) {
 	}
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 5<<20))
 	return string(body), nil
+}
+
+func pickBestVariant(content, baseURL string) (string, int) {
+	var bestURL string
+	bestBW := 0
+	lines := strings.Split(content, "\n")
+	for i, line := range lines {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "#EXT-X-STREAM-INF") || strings.Contains(line, "I-FRAME") {
+			continue
+		}
+		bw := 0
+		for _, part := range strings.Split(line, ",") {
+			part = strings.TrimSpace(part)
+			if strings.HasPrefix(part, "BANDWIDTH=") {
+				bw, _ = strconv.Atoi(strings.TrimPrefix(part, "BANDWIDTH="))
+			}
+		}
+		if i+1 < len(lines) {
+			next := strings.TrimSpace(lines[i+1])
+			if next != "" && !strings.HasPrefix(next, "#") {
+				if !strings.HasPrefix(next, "http") {
+					u, _ := url.Parse(baseURL)
+					ref, _ := url.Parse(next)
+					if u != nil && ref != nil {
+						next = u.ResolveReference(ref).String()
+					}
+				}
+				if bw > bestBW {
+					bestBW = bw
+					bestURL = next
+				}
+			}
+		}
+	}
+	return bestURL, bestBW
 }
