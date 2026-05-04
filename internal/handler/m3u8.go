@@ -6,10 +6,9 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
-)
 
-var m3u8Client = &http.Client{Timeout: 10 * time.Second}
+	"github.com/henry/javapi/internal/scraper"
+)
 
 // ProxyM3U8 fetches a remote M3U8 playlist, rewrites segment URLs to proxy through this API,
 // and returns the modified playlist to the client.
@@ -36,7 +35,8 @@ func ProxyM3U8(w http.ResponseWriter, r *http.Request) {
 	req.Header.Set("User-Agent", "Mozilla/5.0")
 	req.Header.Set("Accept", "application/vnd.apple.mpegurl,application/x-mpegURL,*/*")
 
-	resp, err := m3u8Client.Do(req)
+	client := scraper.NewCFClient("")
+	resp, err := client.Do(req)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "failed to fetch M3U8")
 		return
