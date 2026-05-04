@@ -5,10 +5,8 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
-
-	"github.com/henry/javapi/internal/scraper"
+	"time"
 )
 
 func ProxyM3U8(w http.ResponseWriter, r *http.Request) {
@@ -24,11 +22,11 @@ func ProxyM3U8(w http.ResponseWriter, r *http.Request) {
 	}
 	targetURL := string(decoded)
 
-	proxyURL := os.Getenv("SCRAPER_MISSAV_PROXY_URL")
-	client := scraper.NewCFClient(proxyURL)
 	req, _ := http.NewRequestWithContext(r.Context(), "GET", targetURL, nil)
-	req.Header.Set("User-Agent", scraper.FirefoxUA)
-	req.Header.Set("Accept", "application/vnd.apple.mpegurl,*/*")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:150.0) Gecko/20100101 Firefox/150.0")
+	req.Header.Set("Accept", "application/vnd.apple.mpegurl,application/x-mpegURL,text/plain,*/*")
+	req.Header.Set("Referer", "https://missav.ws/")
+	client := &http.Client{Timeout: 10 * time.Second}
 
 	resp, err := client.Do(req)
 	if err != nil || resp.StatusCode >= 400 {
