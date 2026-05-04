@@ -2,7 +2,6 @@ package handler
 
 import (
 	"encoding/base64"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -66,10 +65,8 @@ func ProxyM3U8(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		encodedSegment := base64.URLEncoding.EncodeToString([]byte(segmentURL))
-		proxyURL := fmt.Sprintf("%s://%s/api/v1/m3u8?url=%s",
-			getScheme(r), r.Host, encodedSegment)
-		rewritten.WriteString(proxyURL)
+		// Write absolute URL directly (no proxy for .ts segments)
+		rewritten.WriteString(segmentURL)
 		rewritten.WriteString("\n")
 	}
 
