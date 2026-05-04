@@ -58,7 +58,7 @@ func (e *javvidsExtractor) Extract(ctx context.Context, client *http.Client, pag
 
 			var streamID, token, timestamp string
 			for _, w := range words {
-				if strings.Contains(w, "-") && len(w) > 20 {
+				if len(w) >= 20 && hasUpperAndLower(w) {
 					streamID = w
 				} else if len(w) == 15 && isAlpha(w) {
 					token = w
@@ -88,6 +88,19 @@ func isAlpha(s string) bool {
 		}
 	}
 	return true
+}
+
+func hasUpperAndLower(s string) bool {
+	hasUpper, hasLower := false, false
+	for _, c := range s {
+		if c >= 'A' && c <= 'Z' {
+			hasUpper = true
+		}
+		if c >= 'a' && c <= 'z' {
+			hasLower = true
+		}
+	}
+	return hasUpper && hasLower
 }
 
 func isNumeric(s string) bool {
