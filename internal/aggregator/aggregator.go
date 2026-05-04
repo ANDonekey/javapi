@@ -2,6 +2,9 @@ package aggregator
 
 import (
 	"context"
+	"encoding/json"
+	"io"
+	"net/http"
 	"fmt"
 	"log"
 	"os"
@@ -175,4 +178,88 @@ func (s *Service) Aggregate(ctx context.Context, code string) (*domain.SearchRes
 		_ = s.cache.Set(ctx, cacheKey, resp, 5*time.Minute)
 	}
 	return resp, nil
+}
+
+// StreamEvent is a single NDJSON line in the streaming response.
+type StreamEvent struct {
+	Type     string              `json:"type"`
+	SiteName string              `json:"siteName,omitempty"`
+	Movie    *domain.Movie       `json:"movie,omitempty"`
+	Result   *domain.VideoResult `json:"result,omitempty"`
+	TotalMs  int64               `json:"total_ms,omitempty"`
+}
+
+// AggregateStream searches JavDB and all scrapers, writing NDJSON lines as results arrive.
+func (s *Service) AggregateStream(ctx context.Context, code string, w io.Writer, flusher http.Flusher) error {
+	start := time.Now()
+
+	write := func(ev StreamEvent) bool {
+		select {
+		case <-ctx.Done():
+			return false
+		default:
+		}
+		data, _ := json.Marshal(ev)
+		if _, err := fmt.Fprintf(w, "%s\n", data); err != nil {
+			return false
+		}
+		flusher.Flush()
+		return true
+	}
+
+	sem := semaphore.NewWeighted(s.maxConcurrent)
+	var wg sync.WaitGroup
+
+	var movie *domain.Movie
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := sem.Acquire(ctx, 1); err != nil {
+			return
+		}
+		defer sem.Release(1)
+		m, err := s.javdb.Search(ctx, code)
+		if err != nil {
+			return
+		}
+		if m != nil && m.ID != "" {
+			if detail, err := s.javdb.GetMovie(ctx, m.ID); err == nil && detail != nil {
+				movie = detail
+			} else {
+				movie = m
+			}
+		} else {
+			movie = m
+		}
+		if movie != nil {
+			write(StreamEvent{Type: "movie", Movie: movie})
+		}
+	}()
+
+	for _, scr := range scraper.GetEnabled() {
+		scr := scr
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := sem.Acquire(ctx, 1); err != nil {
+				return
+			}
+			defer sem.Release(1)
+			results, err := scraper.SafeSearch(ctx, scr, scr.FormatCode(code))
+			if err != nil {
+				write(StreamEvent{Type: "result", SiteName: scr.Name(), Result: &domain.VideoResult{
+					SiteName: scr.Name(), Status: domain.StatusError, Version: domain.VersionOriginal, Error: err.Error(),
+				}})
+				return
+			}
+			for _, r := range results {
+				r := r
+				write(StreamEvent{Type: "result", SiteName: scr.Name(), Result: &r})
+			}
+		}()
+	}
+
+	wg.Wait()
+	write(StreamEvent{Type: "done", TotalMs: time.Since(start).Milliseconds()})
+	return nil
 }

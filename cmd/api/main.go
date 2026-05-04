@@ -75,6 +75,7 @@ func main() {
 	r.Group(func(r chi.Router) {
 		r.Use(myMiddleware.Auth(cfg.Auth.APIKeys, "/api/health"))
 		r.Get("/api/v1/search", searchH.Search)
+	r.Get("/api/v1/search/stream", searchH.StreamSearch)
 		r.Get("/api/v1/m3u8", handler.ProxyM3U8)
 		r.Get("/api/v1/proxy", handler.ProxyURL)
 	})
