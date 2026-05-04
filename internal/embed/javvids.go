@@ -2,6 +2,7 @@ package embed
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -30,52 +31,70 @@ func (e *javvidsExtractor) Extract(ctx context.Context, client *http.Client, pag
 	html := string(body)
 
 	allURLs := scraper.ExtractM3U8FromRawHTML(html)
-	var streamURLs, otherURLs []string
+
 	for _, u := range allURLs {
 		if strings.Contains(u, "jav-vids.xyz/stream/") {
-			streamURLs = append(streamURLs, u)
-		} else {
-			otherURLs = append(otherURLs, u)
+			return []string{u}, nil
 		}
-	}
-	if len(streamURLs) > 0 {
-		return streamURLs, nil
-	}
-	if len(otherURLs) > 0 {
-		return otherURLs, nil
 	}
 
-	for _, line := range strings.Split(html, "\n") {
-		for _, key := range []string{`"file":"`, `"src":"`, `"source":"`, `file:"`, `src:`} {
-			if idx := strings.Index(line, key); idx >= 0 {
-				start := idx + len(key)
-				end := strings.IndexAny(line[start:], `"'`)
-				if end > 0 {
-					candidate := line[start : start+end]
-					if strings.Contains(candidate, ".m3u8") && strings.Contains(candidate, "jav-vids.xyz/stream/") {
-						return []string{candidate}, nil
-					}
+	fileID := ""
+	for _, u := range allURLs {
+		if idx := strings.Index(u, "&f="); idx >= 0 {
+			fileID = u[idx+3:]
+			if end := strings.IndexAny(fileID, "& "); end > 0 {
+				fileID = fileID[:end]
+			}
+			break
+		}
+	}
+
+	dictStart := strings.LastIndex(html, ".split('|')")
+	if dictStart >= 0 {
+		quoteStart := strings.LastIndex(html[:dictStart], "'")
+		if quoteStart >= 0 {
+			dictStr := html[quoteStart+1 : dictStart]
+			words := strings.Split(dictStr, "|")
+
+			var streamID, token, timestamp string
+			for _, w := range words {
+				if strings.Contains(w, "-") && len(w) > 20 {
+					streamID = w
+				} else if len(w) == 15 && isAlpha(w) {
+					token = w
+				} else if len(w) == 10 && isNumeric(w) && strings.HasPrefix(w, "177") {
+					timestamp = w
 				}
 			}
+
+			if streamID != "" && fileID != "" && token != "" && timestamp != "" {
+				streamURL := fmt.Sprintf("https://jav-vids.xyz/stream/%s/%s/%s/%s/master.m3u8",
+					streamID, token, timestamp, fileID)
+				return []string{streamURL}, nil
+			}
 		}
 	}
-	for _, unpacked := range scraper.UnpackJavascriptStrings(html) {
-		start := 0
-		for {
-			idx := strings.Index(unpacked[start:], "/stream/")
-			if idx < 0 {
-				break
-			}
-			absIdx := start + idx
-			end := strings.Index(unpacked[absIdx:], ".m3u8")
-			if end > 0 {
-				relPath := unpacked[absIdx : absIdx+end+5]
-				relPath = strings.ReplaceAll(relPath, `\/`, `/`)
-				fullURL := "https://jav-vids.xyz" + relPath
-				return []string{fullURL}, nil
-			}
-			start = absIdx + 8
-		}
+
+	if len(allURLs) > 0 {
+		return allURLs, nil
 	}
 	return nil, nil
+}
+
+func isAlpha(s string) bool {
+	for _, c := range s {
+		if c < 'a' || c > 'z' {
+			return false
+		}
+	}
+	return true
+}
+
+func isNumeric(s string) bool {
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
 }
